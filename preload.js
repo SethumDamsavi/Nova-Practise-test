@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('api', {
   getRecentPrescriptions: (limit) => ipcRenderer.invoke('db:getRecentPrescriptions', limit),
   createPrescription: (prescription) => ipcRenderer.invoke('db:createPrescription', prescription),
   updatePrescription: (id, prescription) => ipcRenderer.invoke('db:updatePrescription', id, prescription),
+  updatePrescriptionStatus: (id, status) => ipcRenderer.invoke('db:updatePrescriptionStatus', id, status),
 
   // Consultations
   getConsultations: (patientId) => ipcRenderer.invoke('db:getConsultations', patientId),
@@ -43,6 +44,16 @@ contextBridge.exposeInMainWorld('api', {
 
   // Inventory & Medication Search
   searchInventory: (query) => ipcRenderer.invoke('db:searchInventory', query),
+
+  // Dynamic Roles Management
+  getRoles: (includeInactive) => ipcRenderer.invoke('roles:get', includeInactive),
+  createRole: (roleData) => ipcRenderer.invoke('roles:create', roleData),
+  updateRole: (id, roleData) => ipcRenderer.invoke('roles:update', id, roleData),
+  toggleRoleStatus: (id, status) => ipcRenderer.invoke('roles:toggleStatus', id, status),
+
+  // User Management
+  getUsers: () => ipcRenderer.invoke('users:get'),
+  createUser: (userData) => ipcRenderer.invoke('users:create', userData),
 
   // First Installation & Setup
   checkInstallation: () => ipcRenderer.invoke('system:checkInstallation'),

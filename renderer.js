@@ -9,8 +9,9 @@ let rxItemIndex = 0;
 let syncCleanup = null;
 let apiKeyVisible = false;
 
-// Setup Wizard State
+// Setup Wizard State (5 Steps)
 let wizardCurrentStep = 1;
+let allDatabaseRoles = [];
 let allSystemModules = [
   { id: 1, name: 'Dashboard', slug: 'dashboard' },
   { id: 2, name: 'Appointments', slug: 'appointments' },
@@ -19,11 +20,42 @@ let allSystemModules = [
   { id: 5, name: 'Pharmacy', slug: 'pharmacy' },
   { id: 6, name: 'Financial Reports', slug: 'financial_reports' }
 ];
-let wizardModuleState = {
+
+// Dynamic list of user accounts to create in Step 2
+let wizardUsers = [
+  {
+    id: 1,
+    full_name: 'Dr. John Silva',
+    username: 'doctor',
+    password: 'doctor123',
+    role_slug: 'doctor',
+    status: 'active'
+  },
+  {
+    id: 2,
+    full_name: 'Jane Perera',
+    username: 'receptionist',
+    password: 'receptionist123',
+    role_slug: 'receptionist',
+    status: 'active'
+  },
+  {
+    id: 3,
+    full_name: 'Nimal Perera',
+    username: 'pharmacist',
+    password: 'pharmacist123',
+    role_slug: 'pharmacist',
+    status: 'active'
+  }
+];
+
+// Map of username -> array of assigned module slugs
+let wizardUserModules = {
   doctor: ['dashboard', 'appointments', 'consultations', 'patient_registry', 'pharmacy', 'financial_reports'],
-  receptionist: ['dashboard', 'appointments', 'patient_registry']
+  receptionist: ['dashboard', 'appointments', 'patient_registry'],
+  pharmacist: ['dashboard', 'pharmacy']
 };
-let currentWizardModuleUser = 'doctor';
+let selectedWizardModuleUsername = 'doctor';
 
 // Active prescription items for doctor patient profile
 let currentPrescriptionItems = [];
@@ -64,7 +96,7 @@ function toggleTheme() {
 }
 
 // ==========================================
-// FIRST INSTALLATION / SETUP WIZARD
+// FIRST INSTALLATION / SETUP WIZARD (5 STEPS)
 // ==========================================
 
 async function checkSystemInstallationFlow() {
@@ -95,8 +127,12 @@ async function openInstallationWizard() {
     if (modules && modules.length > 0) {
       allSystemModules = modules;
     }
+    const roles = await window.api.getRoles();
+    if (roles && roles.length > 0) {
+      allDatabaseRoles = roles;
+    }
   } catch (e) {
-    console.warn('Could not retrieve modules:', e);
+    console.warn('Could not retrieve modules or roles:', e);
   }
 
   goToWizardStep(1);
@@ -105,8 +141,8 @@ async function openInstallationWizard() {
 function goToWizardStep(step) {
   wizardCurrentStep = step;
 
-  // Update step indicators
-  for (let i = 1; i <= 4; i++) {
+  // Update 5-step indicators and panels
+  for (let i = 1; i <= 5; i++) {
     const stepEl = document.getElementById(`wizardStepIndicator-${i}`);
     const lineEl = document.getElementById(`wizardStepLine-${i}`);
     const paneEl = document.getElementById(`wizardPane-${i}`);
@@ -128,75 +164,222 @@ function goToWizardStep(step) {
     }
   }
 
-  if (step === 3) {
+  if (step === 2) {
+    renderWizardUserCards();
+  } else if (step === 3) {
+    populateWizardModuleUserSelect();
     renderWizardModuleCheckboxes();
   } else if (step === 4) {
     renderWizardReviewSummary();
   }
 }
 
+// STEP 2: USER CARDS & DYNAMIC ROLE RENDERING
+function renderWizardUserCards() {
+  const container = document.getElementById('wizardUserAccountsContainer');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const roles = allDatabaseRoles.length > 0 ? allDatabaseRoles : [
+    { name: 'Doctor', slug: 'doctor' },
+    { name: 'Receptionist', slug: 'receptionist' },
+    { name: 'Pharmacist', slug: 'pharmacist' }
+  ];
+
+  wizardUsers.forEach((u, idx) => {
+    const card = document.createElement('div');
+    card.className = 'account-card';
+    card.id = `wizUserCard-${idx}`;
+
+    let roleOptionsHtml = '';
+    roles.forEach(r => {
+      const selected = (u.role_slug === r.slug || u.role_slug === r.name.toLowerCase()) ? 'selected' : '';
+      roleOptionsHtml += `<option value="${r.slug}" ${selected}>${r.name}</option>`;
+    });
+
+    const roleBadgeClass = u.role_slug === 'doctor' ? 'doctor' : (u.role_slug === 'pharmacist' ? 'pharmacist' : 'receptionist');
+
+    card.innerHTML = `
+      <div class="account-card-header">
+        <span class="account-role-badge ${roleBadgeClass}" id="wizUserBadge-${idx}">${(u.role_slug || 'USER').toUpperCase()}</span>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          ${wizardUsers.length > 1 ? `<button type="button" class="btn btn-danger btn-xs" onclick="removeWizardUserCard(${idx})" title="Remove user">&times; Remove</button>` : ''}
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="wizUserFullName-${idx}" placeholder="e.g. Dr. John Silva" value="${u.full_name}" oninput="updateWizardUserData(${idx}, 'full_name', this.value)" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex: 1;">
+          <label>Username *</label>
+          <input type="text" id="wizUserUsername-${idx}" placeholder="username" value="${u.username}" oninput="updateWizardUserData(${idx}, 'username', this.value)" required autocomplete="off">
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label>Role *</label>
+          <select id="wizUserRole-${idx}" onchange="updateWizardUserData(${idx}, 'role_slug', this.value)" style="padding: 7px 10px;">
+            ${roleOptionsHtml}
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex: 1.5;">
+          <label>Password * (Min 6 chars)</label>
+          <input type="password" id="wizUserPassword-${idx}" placeholder="••••••••" value="${u.password}" oninput="updateWizardUserData(${idx}, 'password', this.value)" required autocomplete="new-password">
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label>Account Status</label>
+          <select id="wizUserStatus-${idx}" onchange="updateWizardUserData(${idx}, 'status', this.value)" style="padding: 7px 10px;">
+            <option value="active" ${u.status === 'active' ? 'selected' : ''}>Active</option>
+            <option value="inactive" ${u.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+          </select>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function updateWizardUserData(index, field, value) {
+  if (!wizardUsers[index]) return;
+  const oldUsername = wizardUsers[index].username;
+  wizardUsers[index][field] = value;
+
+  if (field === 'role_slug') {
+    const badge = document.getElementById(`wizUserBadge-${index}`);
+    if (badge) {
+      badge.textContent = value.toUpperCase();
+      badge.className = `account-role-badge ${value === 'doctor' ? 'doctor' : (value === 'pharmacist' ? 'pharmacist' : 'receptionist')}`;
+    }
+    // Update default module assignments if not customized yet
+    if (!wizardUserModules[wizardUsers[index].username]) {
+      if (value === 'doctor') {
+        wizardUserModules[wizardUsers[index].username] = allSystemModules.map(m => m.slug);
+      } else if (value === 'receptionist') {
+        wizardUserModules[wizardUsers[index].username] = ['dashboard', 'appointments', 'patient_registry'];
+      } else if (value === 'pharmacist') {
+        wizardUserModules[wizardUsers[index].username] = ['dashboard', 'pharmacy'];
+      }
+    }
+  }
+
+  if (field === 'username' && oldUsername !== value) {
+    if (wizardUserModules[oldUsername]) {
+      wizardUserModules[value] = wizardUserModules[oldUsername];
+      delete wizardUserModules[oldUsername];
+    }
+  }
+}
+
+function addNewWizardUserCard() {
+  const defaultRole = allDatabaseRoles.find(r => r.slug === 'receptionist') || allDatabaseRoles[0] || { slug: 'receptionist' };
+  wizardUsers.push({
+    id: Date.now(),
+    full_name: '',
+    username: '',
+    password: '',
+    role_slug: defaultRole.slug,
+    status: 'active'
+  });
+  renderWizardUserCards();
+}
+
+function removeWizardUserCard(index) {
+  if (wizardUsers.length <= 1) {
+    alert('At least one user account is required.');
+    return;
+  }
+  const removed = wizardUsers.splice(index, 1)[0];
+  if (removed && removed.username) {
+    delete wizardUserModules[removed.username];
+  }
+  renderWizardUserCards();
+}
+
 function validateStep2AndProceed() {
   const errEl = document.getElementById('wizardStep2Error');
-  const docName = document.getElementById('wizDoctorName').value.trim();
-  const docUser = document.getElementById('wizDoctorUsername').value.trim();
-  const docPass = document.getElementById('wizDoctorPassword').value;
-
-  const recName = document.getElementById('wizReceptionistName').value.trim();
-  const recUser = document.getElementById('wizReceptionistUsername').value.trim();
-  const recPass = document.getElementById('wizReceptionistPassword').value;
-
-  if (!docName || !docUser || !docPass) {
-    errEl.textContent = 'Please fill out all Doctor account fields.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  if (docPass.length < 6) {
-    errEl.textContent = 'Doctor password must be at least 6 characters long.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  if (!recName || !recUser || !recPass) {
-    errEl.textContent = 'Please fill out all Receptionist account fields.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  if (recPass.length < 6) {
-    errEl.textContent = 'Receptionist password must be at least 6 characters long.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  if (docUser.toLowerCase() === recUser.toLowerCase()) {
-    errEl.textContent = 'Doctor and Receptionist cannot have the same username.';
-    errEl.style.display = 'block';
-    return;
-  }
-
   errEl.style.display = 'none';
 
-  // Update preview names
-  document.getElementById('wizDocNamePreview').textContent = docName;
-  document.getElementById('wizRecNamePreview').textContent = recName;
+  if (wizardUsers.length === 0) {
+    errEl.textContent = 'At least one user account must be created.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const usernamesSeen = new Set();
+
+  for (let i = 0; i < wizardUsers.length; i++) {
+    const u = wizardUsers[i];
+    const fullName = (u.full_name || '').trim();
+    const uName = (u.username || '').trim();
+    const pass = u.password || '';
+
+    if (!fullName) {
+      errEl.textContent = `User #${i + 1}: Full Name is required.`;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    if (!uName) {
+      errEl.textContent = `User #${i + 1} (${fullName}): Username is required.`;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    if (usernamesSeen.has(uName.toLowerCase())) {
+      errEl.textContent = `Duplicate username detected: "${uName}". Usernames must be unique.`;
+      errEl.style.display = 'block';
+      return;
+    }
+    usernamesSeen.add(uName.toLowerCase());
+
+    if (!pass || pass.length < 6) {
+      errEl.textContent = `User "${uName}": Password must be at least 6 characters long.`;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    // Initialize default modules for each user if not present
+    if (!wizardUserModules[uName]) {
+      if (u.role_slug === 'doctor') {
+        wizardUserModules[uName] = allSystemModules.map(m => m.slug);
+      } else if (u.role_slug === 'receptionist') {
+        wizardUserModules[uName] = ['dashboard', 'appointments', 'patient_registry'];
+      } else if (u.role_slug === 'pharmacist') {
+        wizardUserModules[uName] = ['dashboard', 'pharmacy'];
+      } else {
+        const foundRole = allDatabaseRoles.find(r => r.slug === u.role_slug);
+        try {
+          wizardUserModules[uName] = foundRole && foundRole.default_modules ? JSON.parse(foundRole.default_modules) : ['dashboard'];
+        } catch (e) {
+          wizardUserModules[uName] = ['dashboard'];
+        }
+      }
+    }
+  }
 
   goToWizardStep(3);
 }
 
-function switchWizardModuleUser(role) {
-  currentWizardModuleUser = role;
-  const docBtn = document.getElementById('wizUserTabDoctor');
-  const recBtn = document.getElementById('wizUserTabReceptionist');
+// STEP 3: MODULE PERMISSIONS DROPDOWN & CHECKBOXES
+function populateWizardModuleUserSelect() {
+  const select = document.getElementById('wizardModuleUserSelect');
+  if (!select) return;
 
-  if (role === 'doctor') {
-    docBtn.className = 'tab-btn active';
-    recBtn.className = 'tab-btn';
-  } else {
-    docBtn.className = 'tab-btn';
-    recBtn.className = 'tab-btn active';
+  select.innerHTML = '';
+  wizardUsers.forEach(u => {
+    const roleLabel = (u.role_slug || 'Staff').toUpperCase();
+    select.innerHTML += `<option value="${u.username}">${u.full_name} (${u.username} • ${roleLabel})</option>`;
+  });
+
+  if (!wizardUsers.some(u => u.username === selectedWizardModuleUsername)) {
+    selectedWizardModuleUsername = wizardUsers[0] ? wizardUsers[0].username : '';
   }
+  select.value = selectedWizardModuleUsername;
+}
 
+function handleWizardModuleUserSelect(username) {
+  selectedWizardModuleUsername = username;
   renderWizardModuleCheckboxes();
 }
 
@@ -204,7 +387,7 @@ function renderWizardModuleCheckboxes() {
   const container = document.getElementById('wizardModuleCheckboxGrid');
   if (!container) return;
 
-  const assigned = wizardModuleState[currentWizardModuleUser] || [];
+  const assigned = wizardUserModules[selectedWizardModuleUsername] || [];
   container.innerHTML = '';
 
   allSystemModules.forEach(mod => {
@@ -225,89 +408,79 @@ function renderWizardModuleCheckboxes() {
 }
 
 function handleModuleCheckboxToggle(slug, isChecked) {
-  let list = wizardModuleState[currentWizardModuleUser] || [];
+  let list = wizardUserModules[selectedWizardModuleUsername] || [];
   if (isChecked) {
     if (!list.includes(slug)) list.push(slug);
   } else {
     list = list.filter(s => s !== slug);
   }
-  wizardModuleState[currentWizardModuleUser] = list;
+  wizardUserModules[selectedWizardModuleUsername] = list;
   renderWizardModuleCheckboxes();
 }
 
 function toggleSelectAllModules(checked) {
   if (checked) {
-    wizardModuleState[currentWizardModuleUser] = allSystemModules.map(m => m.slug);
+    wizardUserModules[selectedWizardModuleUsername] = allSystemModules.map(m => m.slug);
   } else {
-    wizardModuleState[currentWizardModuleUser] = [];
+    wizardUserModules[selectedWizardModuleUsername] = [];
   }
   renderWizardModuleCheckboxes();
 }
 
+// STEP 4: REVIEW & CONFIRMATION
 function renderWizardReviewSummary() {
-  const docName = document.getElementById('wizDoctorName').value.trim();
-  const docUser = document.getElementById('wizDoctorUsername').value.trim();
-  const recName = document.getElementById('wizReceptionistName').value.trim();
-  const recUser = document.getElementById('wizReceptionistUsername').value.trim();
+  const container = document.getElementById('wizardReviewCardsContainer');
+  if (!container) return;
+  container.innerHTML = '';
 
-  document.getElementById('reviewDocName').textContent = docName;
-  document.getElementById('reviewDocUser').textContent = docUser;
-  document.getElementById('reviewRecName').textContent = recName;
-  document.getElementById('reviewRecUser').textContent = recUser;
+  wizardUsers.forEach(u => {
+    const assigned = wizardUserModules[u.username] || [];
+    let tagsHtml = '';
+    assigned.forEach(slug => {
+      const mod = allSystemModules.find(m => m.slug === slug);
+      tagsHtml += `<span class="module-tag">${mod ? mod.name : slug}</span>`;
+    });
 
-  const docModulesContainer = document.getElementById('reviewDocModules');
-  docModulesContainer.innerHTML = '';
-  (wizardModuleState.doctor || []).forEach(slug => {
-    const mod = allSystemModules.find(m => m.slug === slug);
-    const name = mod ? mod.name : slug;
-    docModulesContainer.innerHTML += `<span class="module-tag">${name}</span>`;
-  });
-
-  const recModulesContainer = document.getElementById('reviewRecModules');
-  recModulesContainer.innerHTML = '';
-  (wizardModuleState.receptionist || []).forEach(slug => {
-    const mod = allSystemModules.find(m => m.slug === slug);
-    const name = mod ? mod.name : slug;
-    recModulesContainer.innerHTML += `<span class="module-tag">${name}</span>`;
+    const card = document.createElement('div');
+    card.className = 'review-card';
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span class="account-role-badge ${u.role_slug}">${(u.role_slug || 'Role').toUpperCase()}</span>
+        <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Status: <strong>${u.status}</strong></span>
+      </div>
+      <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">${u.full_name}</div>
+      <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 10px;">Username: <code>${u.username}</code></div>
+      <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Assigned Modules (${assigned.length}):</div>
+      <div class="tags-container">${tagsHtml || '<span style="color: var(--text-muted); font-size: 11px;">None assigned</span>'}</div>
+    `;
+    container.appendChild(card);
   });
 }
 
+// STEP 5: SUBMIT & COMPLETE INSTALLATION
 async function handleFinishInstallationSubmit() {
   const btn = document.getElementById('btnCompleteInstall');
   btn.disabled = true;
   btn.textContent = 'Configuring System...';
 
-  const docName = document.getElementById('wizDoctorName').value.trim();
-  const docUser = document.getElementById('wizDoctorUsername').value.trim();
-  const docPass = document.getElementById('wizDoctorPassword').value;
-
-  const recName = document.getElementById('wizReceptionistName').value.trim();
-  const recUser = document.getElementById('wizReceptionistUsername').value.trim();
-  const recPass = document.getElementById('wizReceptionistPassword').value;
-
   try {
-    await window.api.completeInstallation({
-      doctor: {
-        name: docName,
-        username: docUser,
-        password: docPass
-      },
-      receptionist: {
-        name: recName,
-        username: recUser,
-        password: recPass
-      },
-      doctorModules: wizardModuleState.doctor || [],
-      receptionistModules: wizardModuleState.receptionist || []
-    });
+    const payload = wizardUsers.map(u => ({
+      full_name: u.full_name,
+      name: u.full_name,
+      username: u.username,
+      password: u.password,
+      role_slug: u.role_slug,
+      status: u.status || 'active',
+      modules: wizardUserModules[u.username] || []
+    }));
 
-    document.getElementById('wizardCompletionSuccess').style.display = 'block';
-    document.getElementById('wizardStep4Actions').style.display = 'none';
+    await window.api.completeInstallation({ users: payload });
+    goToWizardStep(5);
   } catch (error) {
-    console.error('Installation error:', error);
+    console.error('Installation setup error:', error);
     alert('Installation setup error: ' + error.message);
     btn.disabled = false;
-    btn.textContent = 'Finish & Complete Installation';
+    btn.textContent = 'Finish & Complete Installation \u2192';
   }
 }
 
@@ -379,7 +552,14 @@ async function handleLoginSubmit(event) {
   }
 }
 
-function handleLogout() {
+async function handleLogout() {
+  try {
+    if (window.api && window.api.logout) {
+      await window.api.logout();
+    }
+  } catch (e) {
+    console.warn('Logout notice:', e);
+  }
   currentUser = null;
   selectedPatientId = null;
   currentPrescriptionItems = [];
@@ -488,9 +668,13 @@ function switchScreen(screenId) {
 function loadScreenData(screenId) {
   switch (screenId) {
     case 'dashboard':
-      loadDashboardAnalytics();
+      if (currentUser && currentUser.modules && currentUser.modules.includes('financial_reports')) {
+        loadDashboardAnalytics();
+      }
       refreshQueueUI();
-      loadPatientsDropdown();
+      if (currentUser && currentUser.modules && currentUser.modules.includes('patient_registry')) {
+        loadPatientsDropdown();
+      }
       break;
     case 'appointments':
       loadAppointmentsList();
@@ -522,21 +706,32 @@ function loadScreenData(screenId) {
 // DASHBOARD ANALYTICS LOADER
 async function loadDashboardAnalytics() {
   if (!currentUser) return;
+  if (!currentUser.modules || !currentUser.modules.includes('financial_reports')) return;
   
-  const startDate = document.getElementById('dashStartDate').value;
-  const endDate = document.getElementById('dashEndDate').value;
+  const startEl = document.getElementById('dashStartDate');
+  const endEl = document.getElementById('dashEndDate');
+  if (!startEl || !endEl) return;
+  
+  const startDate = startEl.value;
+  const endDate = endEl.value;
 
   try {
     const summary = await window.api.getProfitSummary(startDate, endDate);
     
-    document.getElementById('dashPatientsSeen').textContent = summary.patients_seen;
-    document.getElementById('dashRemainingQueue').textContent = summary.remaining_appointments;
+    const seenEl = document.getElementById('dashPatientsSeen');
+    const queueEl = document.getElementById('dashRemainingQueue');
+    if (seenEl) seenEl.textContent = summary.patients_seen;
+    if (queueEl) queueEl.textContent = summary.remaining_appointments;
 
-    if (currentUser.permissions.includes('view_profits')) {
-      document.getElementById('dashTotalRevenue').textContent = `Rs. ${summary.total_revenue.toFixed(2)}`;
-      document.getElementById('dashTotalProfit').textContent = `Rs. ${summary.total_profit.toFixed(2)}`;
-      document.getElementById('dashMedProfit').textContent = `Rs. ${summary.medicine_profit.toFixed(2)}`;
-      document.getElementById('dashFeeProfit').textContent = `Rs. ${summary.doctor_fee_profit.toFixed(2)}`;
+    if (currentUser.permissions && currentUser.permissions.includes('view_profits')) {
+      const revEl = document.getElementById('dashTotalRevenue');
+      const profEl = document.getElementById('dashTotalProfit');
+      const medEl = document.getElementById('dashMedProfit');
+      const feeEl = document.getElementById('dashFeeProfit');
+      if (revEl) revEl.textContent = `Rs. ${summary.total_revenue.toFixed(2)}`;
+      if (profEl) profEl.textContent = `Rs. ${summary.total_profit.toFixed(2)}`;
+      if (medEl) medEl.textContent = `Rs. ${summary.medicine_profit.toFixed(2)}`;
+      if (feeEl) feeEl.textContent = `Rs. ${summary.doctor_fee_profit.toFixed(2)}`;
     }
   } catch (error) {
     console.error('Failed to load dashboard analytics:', error);
@@ -2219,6 +2414,32 @@ async function loadInventoryList() {
   try {
     allInventory = await window.api.getInventory();
     renderInventoryTable(allInventory);
+
+    // Render low stock alerts
+    if (window.api && window.api.getInventoryLowStock) {
+      try {
+        const lowStock = await window.api.getInventoryLowStock();
+        const alertContainer = document.getElementById('pharmacyLowStockAlertsContainer');
+        if (alertContainer) {
+          if (lowStock && lowStock.length > 0) {
+            alertContainer.innerHTML = lowStock.map(m => `
+              <div class="low-stock-alert-banner">
+                <span class="badge-low-stock">LOW STOCK</span>
+                <span style="font-size: 13px; font-weight: 700;">${m.name}</span> &mdash;
+                <span style="color:#ef4444; font-weight: 700; font-size: 13px;">${m.quantity} remaining</span>
+                <span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">(Min threshold: ${m.min_stock_level || 10})</span>
+              </div>
+            `).join('');
+            alertContainer.style.display = 'block';
+          } else {
+            alertContainer.innerHTML = '';
+            alertContainer.style.display = 'none';
+          }
+        }
+      } catch (e) {
+        console.warn('Low stock check notice:', e);
+      }
+    }
   } catch (error) {
     console.error('Failed to load inventory:', error);
   }

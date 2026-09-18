@@ -154,7 +154,10 @@ function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS modules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT UNIQUE NOT NULL,
-      slug TEXT UNIQUE NOT NULL
+      slug TEXT UNIQUE NOT NULL,
+      status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS user_module_permissions (
@@ -200,14 +203,27 @@ function initializeDatabase() {
   `);
 
   // Ensure missing columns exist in existing database
+  ensureColumn('roles', 'slug', 'TEXT');
+  ensureColumn('roles', 'status', "TEXT DEFAULT 'active'");
+  ensureColumn('roles', 'created_at', 'TEXT');
+  ensureColumn('roles', 'updated_at', 'TEXT');
+  ensureColumn('roles', 'default_modules', "TEXT DEFAULT '[]'");
+  ensureColumn('roles', 'is_system', 'INTEGER DEFAULT 0');
+
+  ensureColumn('users', 'full_name', 'TEXT');
   ensureColumn('users', 'role_id', 'INTEGER');
   ensureColumn('users', 'status', "TEXT DEFAULT 'active'");
+
   ensureColumn('inventory', 'code', 'TEXT');
   ensureColumn('inventory', 'category', 'TEXT');
   ensureColumn('inventory', 'dosage_form', 'TEXT');
   ensureColumn('inventory', 'min_stock_level', 'INTEGER DEFAULT 10');
   ensureColumn('inventory', 'expiry_date', 'TEXT');
+
   ensureColumn('prescriptions', 'notes', 'TEXT');
+  ensureColumn('prescriptions', 'consultation_id', 'INTEGER');
+  ensureColumn('prescriptions', 'doctor_id', 'INTEGER');
+
   ensureColumn('consultations', 'prescription_id', 'INTEGER');
   ensureColumn('consultations', 'prescription_items', 'TEXT');
 
@@ -222,6 +238,9 @@ function initializeDatabase() {
   ensureColumn('patients', 'deleted', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn('patients', 'deleted_at', 'TEXT');
   ensureColumn('patients', 'is_dirty', 'INTEGER NOT NULL DEFAULT 0');
+
+  // Backfill full_name on users if missing
+  db.exec("UPDATE users SET full_name = COALESCE(full_name, name) WHERE full_name IS NULL OR full_name = '';");
 
   // Backfill patient UUIDs and full_names if missing
   const existingPatients = db.prepare("SELECT id, name, uid, full_name FROM patients WHERE uid IS NULL OR uid = ''").all();
@@ -280,11 +299,62 @@ function initializeDatabase() {
   insertModule.run(5, 'Pharmacy', 'pharmacy');
   insertModule.run(6, 'Financial Reports', 'financial_reports');
 
-  // Insert default roles if not exist
-  const insertRole = db.prepare('INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)');
-  insertRole.run('receptionist', JSON.stringify(['view_patients', 'manage_patients', 'manage_queue']));
-  insertRole.run('pharmacist', JSON.stringify(['view_patients', 'dispense', 'manage_inventory']));
-  insertRole.run('doctor', JSON.stringify(['view_patients', 'manage_patients', 'prescribe', 'dispense', 'manage_inventory', 'view_profits', 'manage_queue']));
+  // Seed default roles with proper names and slugs
+  const defaultRoles = [
+    {
+      name: 'Doctor',
+      slug: 'doctor',
+      permissions: ['view_patients', 'manage_patients', 'prescribe', 'dispense', 'manage_inventory', 'view_profits', 'manage_queue'],
+      default_modules: ['dashboard', 'appointments', 'consultations', 'patient_registry', 'pharmacy', 'financial_reports']
+    },
+    {
+      name: 'Receptionist',
+      slug: 'receptionist',
+      permissions: ['view_patients', 'manage_patients', 'manage_queue'],
+      default_modules: ['dashboard', 'appointments', 'patient_registry']
+    },
+    {
+      name: 'Pharmacist',
+      slug: 'pharmacist',
+      permissions: ['view_patients', 'dispense', 'manage_inventory'],
+      default_modules: ['dashboard', 'pharmacy']
+    }
+  ];
+
+  for (const r of defaultRoles) {
+    const existing = db.prepare('SELECT id, name, slug FROM roles WHERE slug = ? OR lower(name) = ?').get(r.slug, r.slug);
+    if (existing) {
+      db.prepare(`
+        UPDATE roles
+        SET name = ?, slug = ?, permissions = COALESCE(permissions, ?), default_modules = COALESCE(default_modules, ?), status = 'active', is_system = 1
+        WHERE id = ?
+      `).run(r.name, r.slug, JSON.stringify(r.permissions), JSON.stringify(r.default_modules), existing.id);
+    } else {
+      db.prepare(`
+        INSERT INTO roles (name, slug, permissions, default_modules, status, is_system)
+        VALUES (?, ?, ?, ?, 'active', 1)
+      `).run(r.name, r.slug, JSON.stringify(r.permissions), JSON.stringify(r.default_modules));
+    }
+  }
+
+  // Ensure all existing roles have non-null slugs
+  db.exec("UPDATE roles SET slug = lower(replace(name, ' ', '_')) WHERE slug IS NULL OR slug = '';");
+
+  // Deduplicate roles by slug
+  const allExistingRoles = db.prepare('SELECT id, slug, is_system FROM roles ORDER BY is_system DESC, id ASC').all();
+  const seenSlugs = new Set();
+  for (const roleRow of allExistingRoles) {
+    if (seenSlugs.has(roleRow.slug)) {
+      const primaryRole = db.prepare('SELECT id FROM roles WHERE slug = ? ORDER BY is_system DESC, id ASC LIMIT 1').get(roleRow.slug);
+      if (primaryRole && primaryRole.id !== roleRow.id) {
+        db.prepare('UPDATE user_roles SET role_id = ? WHERE role_id = ?').run(primaryRole.id, roleRow.id);
+        db.prepare('UPDATE users SET role_id = ? WHERE role_id = ?').run(primaryRole.id, roleRow.id);
+        db.prepare('DELETE FROM roles WHERE id = ?').run(roleRow.id);
+      }
+    } else {
+      seenSlugs.add(roleRow.slug);
+    }
+  }
 
   // Seed standard medicines in inventory if inventory is completely empty
   const invCount = db.prepare('SELECT COUNT(*) as count FROM inventory WHERE is_deleted = 0').get().count;
@@ -347,6 +417,10 @@ const dbOps = {
     }
   },
 
+  isSystemInstalled() {
+    return this.isInstallationCompleted();
+  },
+
   getModules() {
     return db.prepare('SELECT * FROM modules ORDER BY id ASC').all();
   },
@@ -371,81 +445,271 @@ const dbOps = {
     return Boolean(perm && perm.can_view === 1);
   },
 
-  completeInstallation({ doctor, receptionist, doctorModules = [], receptionistModules = [] }) {
+  // Dynamic Role Management
+  getRoles(includeInactive = false) {
+    if (includeInactive) {
+      return db.prepare('SELECT * FROM roles ORDER BY is_system DESC, name ASC').all();
+    }
+    return db.prepare("SELECT * FROM roles WHERE status = 'active' ORDER BY is_system DESC, name ASC").all();
+  },
+
+  getRoleById(id) {
+    return db.prepare('SELECT * FROM roles WHERE id = ?').get(id);
+  },
+
+  createRole({ name, slug, permissions = [], default_modules = [] }) {
+    if (!name || !name.trim()) throw new Error('Role name is required.');
+    const roleName = name.trim();
+    const roleSlug = (slug || roleName.toLowerCase().replace(/[^a-z0-9]+/g, '_')).trim();
+
+    const existing = db.prepare('SELECT id FROM roles WHERE slug = ? OR lower(name) = ?').get(roleSlug, roleName.toLowerCase());
+    if (existing) {
+      throw new Error(`Role with name "${roleName}" or slug "${roleSlug}" already exists.`);
+    }
+
+    const now = new Date().toISOString();
+    const result = db.prepare(`
+      INSERT INTO roles (name, slug, permissions, default_modules, status, is_system, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'active', 0, ?, ?)
+    `).run(roleName, roleSlug, JSON.stringify(permissions), JSON.stringify(default_modules), now, now);
+
+    return db.prepare('SELECT * FROM roles WHERE id = ?').get(result.lastInsertRowid);
+  },
+
+  updateRole(id, { name, permissions, default_modules, status }) {
+    const role = db.prepare('SELECT * FROM roles WHERE id = ?').get(id);
+    if (!role) throw new Error('Role not found.');
+
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE roles
+      SET name = COALESCE(?, name),
+          permissions = COALESCE(?, permissions),
+          default_modules = COALESCE(?, default_modules),
+          status = COALESCE(?, status),
+          updated_at = ?
+      WHERE id = ?
+    `).run(
+      name ? name.trim() : null,
+      permissions ? JSON.stringify(permissions) : null,
+      default_modules ? JSON.stringify(default_modules) : null,
+      status || null,
+      now,
+      id
+    );
+
+    return db.prepare('SELECT * FROM roles WHERE id = ?').get(id);
+  },
+
+  toggleRoleStatus(id, newStatus) {
+    const role = db.prepare('SELECT * FROM roles WHERE id = ?').get(id);
+    if (!role) throw new Error('Role not found.');
+
+    if (newStatus === 'inactive') {
+      const activeUsersCount = db.prepare(`
+        SELECT COUNT(*) as count FROM users u
+        JOIN user_roles ur ON u.id = ur.user_id
+        WHERE ur.role_id = ? AND u.status = 'active' AND u.is_deleted = 0
+      `).get(id).count;
+
+      if (activeUsersCount > 0) {
+        throw new Error(`Cannot deactivate role "${role.name}": it is currently assigned to ${activeUsersCount} active user(s).`);
+      }
+    }
+
+    const now = new Date().toISOString();
+    db.prepare("UPDATE roles SET status = ?, updated_at = ? WHERE id = ?").run(newStatus, now, id);
+    return db.prepare('SELECT * FROM roles WHERE id = ?').get(id);
+  },
+
+  // User Management
+  getUsers() {
+    return db.prepare(`
+      SELECT u.id, COALESCE(u.full_name, u.name) as full_name, u.username, u.role_id, u.status, u.created_at, u.updated_at,
+             COALESCE(r.name, 'Staff') as role_name,
+             COALESCE(r.slug, 'staff') as role_slug
+      FROM users u
+      LEFT JOIN user_roles ur ON u.id = ur.user_id
+      LEFT JOIN roles r ON ur.role_id = r.id
+      WHERE u.is_deleted = 0
+      ORDER BY u.id ASC
+    `).all();
+  },
+
+  createUser({ full_name, username, password, role_id, status = 'active' }) {
+    if (!full_name || !username || !password) {
+      throw new Error('Full Name, Username, and Password are required.');
+    }
+    const cleanUser = username.trim();
+    const existing = db.prepare('SELECT id FROM users WHERE username = ? AND is_deleted = 0').get(cleanUser);
+    if (existing) {
+      throw new Error(`Username "${cleanUser}" is already taken.`);
+    }
+
+    const now = new Date().toISOString();
+    const passHash = hashPassword(password);
+    const result = db.prepare(`
+      INSERT INTO users (name, full_name, username, password_hash, role_id, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(full_name.trim(), full_name.trim(), cleanUser, passHash, role_id || null, status, now, now);
+
+    const newUserId = result.lastInsertRowid;
+    if (role_id) {
+      db.prepare('INSERT OR REPLACE INTO user_roles (user_id, role_id) VALUES (?, ?)').run(newUserId, role_id);
+    }
+
+    return db.prepare(`
+      SELECT u.id, COALESCE(u.full_name, u.name) as full_name, u.username, u.role_id, u.status,
+             COALESCE(r.name, 'Staff') as role_name, COALESCE(r.slug, 'staff') as role_slug
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE u.id = ?
+    `).get(newUserId);
+  },
+
+  completeInstallation(setupPayload) {
     const tx = db.transaction(() => {
       const now = new Date().toISOString();
-      const getRoleId = (name) => {
-        let role = db.prepare('SELECT id FROM roles WHERE name = ?').get(name);
-        if (!role) {
-          const insertRole = db.prepare('INSERT INTO roles (name, permissions) VALUES (?, ?)');
-          const id = insertRole.run(name, JSON.stringify(['view_patients', 'manage_patients'])).lastInsertRowid;
-          return id;
-        }
-        return role.id;
-      };
-
-      const docRoleId = getRoleId('doctor');
-      const recRoleId = getRoleId('receptionist');
-
-      // 1. Create or Update Doctor
-      let doctorUser = db.prepare('SELECT id FROM users WHERE username = ?').get(doctor.username);
-      let doctorId;
-      const docHash = hashPassword(doctor.password);
-      if (doctorUser) {
-        db.prepare('UPDATE users SET name = ?, password_hash = ?, role_id = ?, status = ?, updated_at = ? WHERE id = ?')
-          .run(doctor.name || 'Doctor', docHash, docRoleId, 'active', now, doctorUser.id);
-        doctorId = doctorUser.id;
-      } else {
-        const res = db.prepare('INSERT INTO users (username, password_hash, name, role_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(doctor.username, docHash, doctor.name || 'Doctor', docRoleId, 'active', now, now);
-        doctorId = res.lastInsertRowid;
-      }
-      db.prepare('INSERT OR REPLACE INTO user_roles (user_id, role_id) VALUES (?, ?)').run(doctorId, docRoleId);
-
-      // 2. Create or Update Receptionist
-      let recUser = db.prepare('SELECT id FROM users WHERE username = ?').get(receptionist.username);
-      let receptionistId;
-      const recHash = hashPassword(receptionist.password);
-      if (recUser) {
-        db.prepare('UPDATE users SET name = ?, password_hash = ?, role_id = ?, status = ?, updated_at = ? WHERE id = ?')
-          .run(receptionist.name || 'Receptionist', recHash, recRoleId, 'active', now, recUser.id);
-        receptionistId = recUser.id;
-      } else {
-        const res = db.prepare('INSERT INTO users (username, password_hash, name, role_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(receptionist.username, recHash, receptionist.name || 'Receptionist', recRoleId, 'active', now, now);
-        receptionistId = res.lastInsertRowid;
-      }
-      db.prepare('INSERT OR REPLACE INTO user_roles (user_id, role_id) VALUES (?, ?)').run(receptionistId, recRoleId);
-
-      // 3. Clear existing module permissions for these users
-      db.prepare('DELETE FROM user_module_permissions WHERE user_id = ?').run(doctorId);
-      db.prepare('DELETE FROM user_module_permissions WHERE user_id = ?').run(receptionistId);
-
       const allModules = db.prepare('SELECT id, slug FROM modules').all();
       const moduleMap = {};
       allModules.forEach(m => { moduleMap[m.slug] = m.id; });
 
-      const insertPerm = db.prepare(`
-        INSERT INTO user_module_permissions (user_id, module_id, can_view, can_create, can_edit, can_delete)
-        VALUES (?, ?, 1, 1, 1, 1)
-      `);
+      const getOrResolveRoleId = (roleIdentifier) => {
+        if (typeof roleIdentifier === 'number') return roleIdentifier;
+        if (!roleIdentifier) return 1;
+        const normalized = String(roleIdentifier).toLowerCase().trim();
+        let role = db.prepare('SELECT id FROM roles WHERE slug = ? OR lower(name) = ?').get(normalized, normalized);
+        if (role) return role.id;
+        const displayName = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+        const insertRole = db.prepare('INSERT INTO roles (name, slug, permissions, default_modules, status, is_system) VALUES (?, ?, ?, ?, ?, ?)');
+        const id = insertRole.run(displayName, normalized, JSON.stringify(['view_patients']), JSON.stringify(['dashboard']), 'active', 0).lastInsertRowid;
+        return id;
+      };
 
-      for (const slug of doctorModules) {
-        if (moduleMap[slug]) {
-          insertPerm.run(doctorId, moduleMap[slug]);
+      const createdUserIds = [];
+
+      // Modern dynamic multi-user format: setupPayload.users = [ { full_name, username, password, role_id, role_slug, modules, status } ]
+      if (Array.isArray(setupPayload.users) && setupPayload.users.length > 0) {
+        for (const u of setupPayload.users) {
+          if (!u.username || !u.username.trim() || !u.password) continue;
+          const uName = u.username.trim();
+          const fullName = (u.full_name || u.name || uName).trim();
+          const passHash = hashPassword(u.password);
+          const roleId = getOrResolveRoleId(u.role_id || u.role_slug || u.role);
+          const status = u.status || 'active';
+
+          let existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(uName);
+          let userId;
+          if (existingUser) {
+            db.prepare(`
+              UPDATE users
+              SET name = ?, full_name = ?, password_hash = ?, role_id = ?, status = ?, updated_at = ?
+              WHERE id = ?
+            `).run(fullName, fullName, passHash, roleId, status, now, existingUser.id);
+            userId = existingUser.id;
+          } else {
+            const res = db.prepare(`
+              INSERT INTO users (name, full_name, username, password_hash, role_id, status, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(fullName, fullName, uName, passHash, roleId, status, now, now);
+            userId = res.lastInsertRowid;
+          }
+
+          db.prepare('INSERT OR REPLACE INTO user_roles (user_id, role_id) VALUES (?, ?)').run(userId, roleId);
+          db.prepare('DELETE FROM user_module_permissions WHERE user_id = ?').run(userId);
+
+          const userMods = Array.isArray(u.modules) ? u.modules : [];
+          const insertPerm = db.prepare(`
+            INSERT INTO user_module_permissions (user_id, module_id, can_view, can_create, can_edit, can_delete)
+            VALUES (?, ?, 1, 1, 1, 1)
+          `);
+          for (const modSlug of userMods) {
+            if (moduleMap[modSlug]) {
+              insertPerm.run(userId, moduleMap[modSlug]);
+            }
+          }
+          createdUserIds.push(userId);
         }
-      }
+      } else if (setupPayload.doctor && setupPayload.receptionist) {
+        // Backward compatibility fallback for legacy test cases
+        const docRoleId = getOrResolveRoleId('doctor');
+        const recRoleId = getOrResolveRoleId('receptionist');
 
-      for (const slug of receptionistModules) {
-        if (moduleMap[slug]) {
-          insertPerm.run(receptionistId, moduleMap[slug]);
+        // 1. Doctor
+        let docUser = db.prepare('SELECT id FROM users WHERE username = ?').get(setupPayload.doctor.username);
+        let docId;
+        const docHash = hashPassword(setupPayload.doctor.password);
+        const docName = setupPayload.doctor.name || setupPayload.doctor.full_name || 'Doctor';
+        if (docUser) {
+          db.prepare('UPDATE users SET name = ?, full_name = ?, password_hash = ?, role_id = ?, status = ?, updated_at = ? WHERE id = ?')
+            .run(docName, docName, docHash, docRoleId, 'active', now, docUser.id);
+          docId = docUser.id;
+        } else {
+          const res = db.prepare('INSERT INTO users (name, full_name, username, password_hash, role_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(docName, docName, setupPayload.doctor.username, docHash, docRoleId, 'active', now, now);
+          docId = res.lastInsertRowid;
+        }
+        db.prepare('INSERT OR REPLACE INTO user_roles (user_id, role_id) VALUES (?, ?)').run(docId, docRoleId);
+        db.prepare('DELETE FROM user_module_permissions WHERE user_id = ?').run(docId);
+        const docMods = setupPayload.doctorModules || ['dashboard', 'appointments', 'consultations', 'patient_registry', 'pharmacy', 'financial_reports'];
+        const insertPerm = db.prepare('INSERT INTO user_module_permissions (user_id, module_id, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)');
+        for (const slug of docMods) {
+          if (moduleMap[slug]) insertPerm.run(docId, moduleMap[slug]);
+        }
+        createdUserIds.push(docId);
+
+        // 2. Receptionist
+        let recUser = db.prepare('SELECT id FROM users WHERE username = ?').get(setupPayload.receptionist.username);
+        let recId;
+        const recHash = hashPassword(setupPayload.receptionist.password);
+        const recName = setupPayload.receptionist.name || setupPayload.receptionist.full_name || 'Receptionist';
+        if (recUser) {
+          db.prepare('UPDATE users SET name = ?, full_name = ?, password_hash = ?, role_id = ?, status = ?, updated_at = ? WHERE id = ?')
+            .run(recName, recName, recHash, recRoleId, 'active', now, recUser.id);
+          recId = recUser.id;
+        } else {
+          const res = db.prepare('INSERT INTO users (name, full_name, username, password_hash, role_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(recName, recName, setupPayload.receptionist.username, recHash, recRoleId, 'active', now, now);
+          recId = res.lastInsertRowid;
+        }
+        db.prepare('INSERT OR REPLACE INTO user_roles (user_id, role_id) VALUES (?, ?)').run(recId, recRoleId);
+        db.prepare('DELETE FROM user_module_permissions WHERE user_id = ?').run(recId);
+        const recMods = setupPayload.receptionistModules || ['dashboard', 'appointments', 'patient_registry'];
+        for (const slug of recMods) {
+          if (moduleMap[slug]) insertPerm.run(recId, moduleMap[slug]);
+        }
+        createdUserIds.push(recId);
+
+        // 3. Pharmacist (if provided in payload)
+        if (setupPayload.pharmacist && setupPayload.pharmacist.username) {
+          const pharmRoleId = getOrResolveRoleId('pharmacist');
+          let pharmUser = db.prepare('SELECT id FROM users WHERE username = ?').get(setupPayload.pharmacist.username);
+          let pharmId;
+          const pharmHash = hashPassword(setupPayload.pharmacist.password);
+          const pharmName = setupPayload.pharmacist.name || setupPayload.pharmacist.full_name || 'Pharmacist';
+          if (pharmUser) {
+            db.prepare('UPDATE users SET name = ?, full_name = ?, password_hash = ?, role_id = ?, status = ?, updated_at = ? WHERE id = ?')
+              .run(pharmName, pharmName, pharmHash, pharmRoleId, 'active', now, pharmUser.id);
+            pharmId = pharmUser.id;
+          } else {
+            const res = db.prepare('INSERT INTO users (name, full_name, username, password_hash, role_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+              .run(pharmName, pharmName, setupPayload.pharmacist.username, pharmHash, pharmRoleId, 'active', now, now);
+            pharmId = res.lastInsertRowid;
+          }
+          db.prepare('INSERT OR REPLACE INTO user_roles (user_id, role_id) VALUES (?, ?)').run(pharmId, pharmRoleId);
+          db.prepare('DELETE FROM user_module_permissions WHERE user_id = ?').run(pharmId);
+          const pharmMods = setupPayload.pharmacistModules || ['dashboard', 'pharmacy'];
+          for (const slug of pharmMods) {
+            if (moduleMap[slug]) insertPerm.run(pharmId, moduleMap[slug]);
+          }
+          createdUserIds.push(pharmId);
         }
       }
 
       // Mark installation completed
       db.prepare("INSERT OR REPLACE INTO sync_settings (key, value) VALUES ('installation_completed', 'true')").run();
 
-      return { success: true, doctorId, receptionistId };
+      return { success: true, createdUserIds };
     });
 
     return tx();
@@ -453,15 +717,17 @@ const dbOps = {
 
   // Auth
   loginUser(username, password) {
+    if (!username || !password) return null;
     const user = db.prepare(`
-      SELECT u.id, u.username, u.name, u.password_hash, u.status,
-             COALESCE(r.name, 'staff') as role_name,
+      SELECT u.id, u.username, COALESCE(u.full_name, u.name) as name, u.full_name, u.password_hash, u.status,
+             COALESCE(r.name, 'Staff') as role_name,
+             COALESCE(r.slug, 'staff') as role_slug,
              COALESCE(r.permissions, '[]') as permissions
       FROM users u
       LEFT JOIN user_roles ur ON u.id = ur.user_id
       LEFT JOIN roles r ON ur.role_id = r.id
-      WHERE u.username = ? AND u.is_deleted = 0
-    `).get(username);
+      WHERE (u.username = ? OR lower(u.username) = lower(?)) AND u.is_deleted = 0 AND (u.status IS NULL OR u.status = 'active')
+    `).get(username.trim(), username.trim());
 
     if (!user) return null;
 
@@ -475,8 +741,10 @@ const dbOps = {
       token,
       id: user.id,
       username: user.username,
-      name: user.name,
+      name: user.full_name || user.name,
+      full_name: user.full_name || user.name,
       role: user.role_name,
+      role_slug: user.role_slug,
       roles: [user.role_name],
       permissions: JSON.parse(user.permissions || '[]'),
       modules: userModules.map(m => m.slug)
@@ -912,13 +1180,16 @@ const dbOps = {
 
   createPrescription(prescription) {
     const now = new Date().toISOString();
+    const rxStatus = prescription.status || 'prescribed';
     const result = db.prepare(`
-      INSERT INTO prescriptions (patient_id, doctor_id, items, status, notes, created_at, updated_at)
-      VALUES (?, ?, ?, 'prescribed', ?, ?, ?)
+      INSERT INTO prescriptions (patient_id, doctor_id, consultation_id, items, status, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       prescription.patient_id,
       prescription.doctor_id || null,
+      prescription.consultation_id || null,
       JSON.stringify(prescription.items),
+      rxStatus,
       prescription.notes || null,
       now,
       now
@@ -934,18 +1205,36 @@ const dbOps = {
     const now = new Date().toISOString();
     db.prepare(`
       UPDATE prescriptions
-      SET items = ?, status = ?, notes = COALESCE(?, notes), updated_at = ?
+      SET items = ?, status = COALESCE(?, status), notes = COALESCE(?, notes), updated_at = ?
       WHERE id = ?
-    `).run(JSON.stringify(prescription.items), prescription.status, prescription.notes || null, now, id);
+    `).run(JSON.stringify(prescription.items), prescription.status || null, prescription.notes || null, now, id);
 
     const updatedRecord = db.prepare('SELECT * FROM prescriptions WHERE id = ?').get(id);
     dbOps.addSyncLog('prescriptions', String(id), 'UPDATE', updatedRecord);
     return true;
   },
 
+  updatePrescriptionStatus(id, status) {
+    const now = new Date().toISOString();
+    db.prepare('UPDATE prescriptions SET status = ?, updated_at = ? WHERE id = ?').run(status, now, id);
+    const updatedRecord = db.prepare('SELECT * FROM prescriptions WHERE id = ?').get(id);
+    if (updatedRecord) {
+      dbOps.addSyncLog('prescriptions', String(id), 'UPDATE', updatedRecord);
+    }
+    return updatedRecord;
+  },
+
   // Dispense logic (atomic transaction)
   dispensePrescription(prescriptionId, dispenseItems, doctorFee, patientId) {
     const dispenseTx = db.transaction(() => {
+      // Check for duplicate dispensing
+      if (prescriptionId) {
+        const existingRx = db.prepare('SELECT id, status FROM prescriptions WHERE id = ?').get(prescriptionId);
+        if (existingRx && existingRx.status === 'dispensed') {
+          throw new Error('This prescription has already been dispensed.');
+        }
+      }
+
       let totalAmount = 0;
       let totalCost = 0;
 

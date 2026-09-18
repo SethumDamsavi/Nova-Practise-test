@@ -19,7 +19,7 @@
         </div>
       </div>
 
-      <!-- Step Indicator Bar -->
+      <!-- Step Indicator Bar (5 Steps) -->
       <div class="wizard-stepper">
         <div class="wizard-step active" id="wizardStepIndicator-1">
           <div class="step-circle">1</div>
@@ -38,6 +38,11 @@
         <div class="step-line" id="wizardStepLine-3"></div>
         <div class="wizard-step" id="wizardStepIndicator-4">
           <div class="step-circle">4</div>
+          <div class="step-label">Review</div>
+        </div>
+        <div class="step-line" id="wizardStepLine-4"></div>
+        <div class="wizard-step" id="wizardStepIndicator-5">
+          <div class="step-circle">5</div>
           <div class="step-label">Complete</div>
         </div>
       </div>
@@ -54,11 +59,15 @@
           </div>
           <div class="status-row">
             <span>Relational Schema:</span>
-            <span class="badge-status seen">users, roles, modules, user_module_permissions, consultations</span>
+            <span class="badge-status seen">users, roles, modules, user_module_permissions, consultations, prescriptions</span>
           </div>
           <div class="status-row">
             <span>Security Engine:</span>
-            <span>SHA-256 One-Way Password Hashing</span>
+            <span>SHA-256 One-Way Password Hashing (Zero Plaintext Storage)</span>
+          </div>
+          <div class="status-row">
+            <span>Default Roles:</span>
+            <span class="badge-status seen">Doctor, Receptionist, Pharmacist</span>
           </div>
           <div class="status-row">
             <span>Database Readiness:</span>
@@ -68,62 +77,28 @@
 
         <div class="wizard-actions">
           <div></div>
-          <button type="button" class="btn" onclick="goToWizardStep(2)">Next: Create User Accounts &rarr;</button>
+          <button type="button" class="btn" onclick="goToWizardStep(2)">Next: User Accounts &rarr;</button>
         </div>
       </div>
 
-      <!-- STEP 2: USER ACCOUNTS CREATION -->
+      <!-- STEP 2: USER ACCOUNTS CREATION (DYNAMIC ROLES & MULTI-USER) -->
       <div class="wizard-step-pane" id="wizardPane-2">
-        <div class="wizard-pane-title">Step 2: Create Initial User Accounts</div>
-        <p class="wizard-pane-desc">Set up credentials for Doctor and Receptionist. Credentials will be securely hashed before being stored in the database.</p>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div class="wizard-pane-title" style="margin-bottom: 0;">Step 2: Create User Accounts &amp; Roles</div>
+          <button type="button" class="btn btn-secondary btn-xs" onclick="addNewWizardUserCard()">+ Add Another User</button>
+        </div>
+        <p class="wizard-pane-desc">Create accounts with dynamic roles loaded from the database. Passwords will be securely hashed with SHA-256.</p>
 
         <div id="wizardStep2Error" class="login-error" style="display: none; margin-bottom: 12px;"></div>
 
-        <div class="accounts-grid">
-          <!-- Doctor Account Form -->
-          <div class="account-card">
-            <div class="account-card-header">
-              <span class="account-role-badge doctor">DOCTOR</span>
-              <span style="font-size: 11px; color: var(--text-muted);">Primary Clinician</span>
-            </div>
-            <div class="form-group">
-              <label for="wizDoctorName">Full Name *</label>
-              <input type="text" id="wizDoctorName" placeholder="e.g. Dr. John Silva" value="Dr. John Silva" required>
-            </div>
-            <div class="form-group">
-              <label for="wizDoctorUsername">Username *</label>
-              <input type="text" id="wizDoctorUsername" placeholder="doctor" value="doctor" required autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="wizDoctorPassword">Password * (Min 6 characters)</label>
-              <input type="password" id="wizDoctorPassword" placeholder="••••••••" value="doctor123" required autocomplete="new-password">
-            </div>
-          </div>
-
-          <!-- Receptionist Account Form -->
-          <div class="account-card">
-            <div class="account-card-header">
-              <span class="account-role-badge receptionist">RECEPTIONIST</span>
-              <span style="font-size: 11px; color: var(--text-muted);">Front Desk &amp; Registration</span>
-            </div>
-            <div class="form-group">
-              <label for="wizReceptionistName">Full Name *</label>
-              <input type="text" id="wizReceptionistName" placeholder="e.g. Kamal Silva" value="Kamal Silva" required>
-            </div>
-            <div class="form-group">
-              <label for="wizReceptionistUsername">Username *</label>
-              <input type="text" id="wizReceptionistUsername" placeholder="receptionist" value="receptionist" required autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="wizReceptionistPassword">Password * (Min 6 characters)</label>
-              <input type="password" id="wizReceptionistPassword" placeholder="••••••••" value="receptionist123" required autocomplete="new-password">
-            </div>
-          </div>
+        <!-- Dynamic User Accounts Container -->
+        <div class="accounts-grid" id="wizardUserAccountsContainer" style="max-height: 400px; overflow-y: auto; padding-right: 4px;">
+          <!-- Injected via renderer.js -->
         </div>
 
         <div class="wizard-actions">
           <button type="button" class="btn btn-secondary" onclick="goToWizardStep(1)">&larr; Back</button>
-          <button type="button" class="btn" onclick="validateStep2AndProceed()">Next: Assign Module Access &rarr;</button>
+          <button type="button" class="btn" onclick="validateStep2AndProceed()">Next: Module Access &rarr;</button>
         </div>
       </div>
 
@@ -132,14 +107,12 @@
         <div class="wizard-pane-title">Step 3: Assign Module Permissions</div>
         <p class="wizard-pane-desc">Assign specific module permissions to each user. The backend and navigation will enforce these permissions.</p>
 
-        <!-- User Tab Switcher for Module Assignment -->
-        <div class="module-user-switcher">
-          <button type="button" id="wizUserTabDoctor" class="tab-btn active" onclick="switchWizardModuleUser('doctor')">
-            👨‍⚕️ Doctor (<span id="wizDocNamePreview">Dr. John Silva</span>)
-          </button>
-          <button type="button" id="wizUserTabReceptionist" class="tab-btn" onclick="switchWizardModuleUser('receptionist')">
-            📋 Receptionist (<span id="wizRecNamePreview">Kamal Silva</span>)
-          </button>
+        <!-- User Selector Dropdown -->
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label for="wizardModuleUserSelect" style="font-weight: 700;">Select User to Configure Permissions:</label>
+          <select id="wizardModuleUserSelect" onchange="handleWizardModuleUserSelect(this.value)" style="font-weight: 600; padding: 8px 12px; font-size: 14px;">
+            <!-- Populated via renderer.js -->
+          </select>
         </div>
 
         <div class="module-selection-container">
@@ -165,35 +138,31 @@
       <!-- STEP 4: REVIEW & CONFIRMATION -->
       <div class="wizard-step-pane" id="wizardPane-4">
         <div class="wizard-pane-title">Step 4: Review &amp; Confirmation</div>
-        <p class="wizard-pane-desc">Review your system setup before finalizing the installation.</p>
+        <p class="wizard-pane-desc">Review all created user accounts, assigned roles, and module permissions before finalizing setup.</p>
 
-        <div class="review-cards-container">
-          <div class="review-card">
-            <div style="font-weight: 700; color: var(--primary); margin-bottom: 6px;" id="reviewDocTitle">Doctor Account</div>
-            <div style="font-size: 13px; margin-bottom: 4px;">Name: <strong id="reviewDocName">-</strong></div>
-            <div style="font-size: 13px; margin-bottom: 8px;">Username: <code id="reviewDocUser">-</code></div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Assigned Modules:</div>
-            <div id="reviewDocModules" class="tags-container"></div>
-          </div>
-
-          <div class="review-card">
-            <div style="font-weight: 700; color: #10b981; margin-bottom: 6px;" id="reviewRecTitle">Receptionist Account</div>
-            <div style="font-size: 13px; margin-bottom: 4px;">Name: <strong id="reviewRecName">-</strong></div>
-            <div style="font-size: 13px; margin-bottom: 8px;">Username: <code id="reviewRecUser">-</code></div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Assigned Modules:</div>
-            <div id="reviewRecModules" class="tags-container"></div>
-          </div>
+        <div class="review-cards-container" id="wizardReviewCardsContainer" style="max-height: 400px; overflow-y: auto; padding-right: 4px;">
+          <!-- Injected via renderer.js -->
         </div>
 
-        <div id="wizardCompletionSuccess" style="display: none; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 16px; margin-top: 16px; text-align: center;">
-          <div style="font-size: 18px; font-weight: 700; color: #10b981; margin-bottom: 4px;">✓ Installation Completed</div>
-          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">Your Doctor Management System is ready for operation.</p>
-          <button type="button" class="btn btn-success" style="width: 100%;" onclick="finishInstallationAndGoToLogin()">Continue to Login</button>
-        </div>
-
-        <div class="wizard-actions" id="wizardStep4Actions">
+        <div class="wizard-actions">
           <button type="button" class="btn btn-secondary" onclick="goToWizardStep(3)">&larr; Back</button>
-          <button type="button" class="btn btn-success" id="btnCompleteInstall" onclick="handleFinishInstallationSubmit()">Finish &amp; Complete Installation</button>
+          <button type="button" class="btn btn-success" id="btnCompleteInstall" onclick="handleFinishInstallationSubmit()">Finish &amp; Complete Installation &rarr;</button>
+        </div>
+      </div>
+
+      <!-- STEP 5: COMPLETE INSTALLATION -->
+      <div class="wizard-step-pane" id="wizardPane-5">
+        <div style="text-align: center; padding: 30px 10px;">
+          <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 32px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+            ✓
+          </div>
+          <h2 style="font-size: 24px; font-weight: 800; color: #10b981; margin-bottom: 8px;">Installation Completed</h2>
+          <p style="font-size: 14px; color: var(--text-secondary); max-width: 440px; margin: 0 auto 24px; line-height: 1.6;">
+            Your Doctor Management System is ready. All user credentials, dynamic roles, and module permissions have been securely initialized.
+          </p>
+          <button type="button" class="btn btn-success" style="padding: 12px 36px; font-size: 15px; font-weight: 700;" onclick="finishInstallationAndGoToLogin()">
+            Continue to Login &rarr;
+          </button>
         </div>
       </div>
     </div>
@@ -229,6 +198,7 @@
         <strong>Default Role Logins:</strong>
         <span>• Doctor: <code>doctor</code> / <code>doctor123</code></span>
         <span>• Receptionist: <code>receptionist</code> / <code>receptionist123</code></span>
+        <span>• Pharmacist: <code>pharmacist</code> / <code>pharmacist123</code></span>
       </div>
     </div>
   </div>
@@ -773,9 +743,12 @@
             <div class="split-col-7">
               <div class="card">
                 <div class="card-title">
-                  <span>Medicine Inventory & Pricing</span>
+                  <span>Medicine Inventory &amp; Pricing</span>
                   <button class="btn btn-success btn-xs" onclick="openNewInventoryModal()">+ Add New Drug</button>
                 </div>
+
+                <!-- Live Low Stock Warning Alerts -->
+                <div id="pharmacyLowStockAlertsContainer" style="display: none; margin-bottom: 14px;"></div>
 
                 <div class="search-container">
                   <div class="search-input-wrapper">

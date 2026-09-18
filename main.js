@@ -365,6 +365,32 @@ ipcMain.handle('system:completeInstallation', async (event, setupData) => {
   return dbOps.completeInstallation(setupData);
 });
 
+// Dynamic Roles Management
+ipcMain.handle('roles:get', async (event, includeInactive = false) => {
+  return dbOps.getRoles(includeInactive);
+});
+
+ipcMain.handle('roles:create', async (event, roleData) => {
+  return dbOps.createRole(roleData);
+});
+
+ipcMain.handle('roles:update', async (event, id, roleData) => {
+  return dbOps.updateRole(id, roleData);
+});
+
+ipcMain.handle('roles:toggleStatus', async (event, id, status) => {
+  return dbOps.toggleRoleStatus(id, status);
+});
+
+// User Management
+ipcMain.handle('users:get', async () => {
+  return dbOps.getUsers();
+});
+
+ipcMain.handle('users:create', async (event, userData) => {
+  return dbOps.createUser(userData);
+});
+
 // Auth & Users
 ipcMain.handle('db:login', async (event, username, password) => {
   const user = dbOps.loginUser(username, password);
@@ -387,9 +413,21 @@ ipcMain.handle('db:checkUserPermission', async (event, userId, moduleSlug) => {
   return dbOps.checkUserPermission(userId, moduleSlug);
 });
 
-// Patients (Protected: patient_registry)
+ipcMain.handle('db:updatePrescriptionStatus', async (event, id, status) => {
+  return dbOps.updatePrescriptionStatus(id, status);
+});
+
+// Patients (Protected: patient_registry, consultations, or pharmacy for clinical lookup)
 ipcMain.handle('db:getPatients', async () => {
-  enforceModulePermission('patient_registry');
+  if (!activeUserSession) {
+    throw new Error('Unauthorized: No active session.');
+  }
+  const canRegistry = dbOps.checkUserPermission(activeUserSession.id, 'patient_registry');
+  const canPharmacy = dbOps.checkUserPermission(activeUserSession.id, 'pharmacy');
+  const canConsult = dbOps.checkUserPermission(activeUserSession.id, 'consultations');
+  if (!canRegistry && !canPharmacy && !canConsult) {
+    throw new Error("Access Denied: You do not have permission for module: patient_registry");
+  }
   return dbOps.getPatients();
 });
 
@@ -399,7 +437,15 @@ ipcMain.handle('db:getRecentPatients', async (event, limit = 10) => {
 });
 
 ipcMain.handle('db:getPatient', async (event, id) => {
-  enforceModulePermission('patient_registry');
+  if (!activeUserSession) {
+    throw new Error('Unauthorized: No active session.');
+  }
+  const canRegistry = dbOps.checkUserPermission(activeUserSession.id, 'patient_registry');
+  const canPharmacy = dbOps.checkUserPermission(activeUserSession.id, 'pharmacy');
+  const canConsult = dbOps.checkUserPermission(activeUserSession.id, 'consultations');
+  if (!canRegistry && !canPharmacy && !canConsult) {
+    throw new Error("Access Denied: You do not have permission for module: patient_registry");
+  }
   return dbOps.getPatient(id);
 });
 
