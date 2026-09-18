@@ -209,6 +209,7 @@ function initializeDatabase() {
   ensureColumn('roles', 'updated_at', 'TEXT');
   ensureColumn('roles', 'default_modules', "TEXT DEFAULT '[]'");
   ensureColumn('roles', 'is_system', 'INTEGER DEFAULT 0');
+  ensureColumn('roles', 'description', 'TEXT');
 
   ensureColumn('users', 'full_name', 'TEXT');
   ensureColumn('users', 'role_id', 'INTEGER');
@@ -457,7 +458,7 @@ const dbOps = {
     return db.prepare('SELECT * FROM roles WHERE id = ?').get(id);
   },
 
-  createRole({ name, slug, permissions = [], default_modules = [] }) {
+  createRole({ name, slug, description, permissions = [], default_modules = [] }) {
     if (!name || !name.trim()) throw new Error('Role name is required.');
     const roleName = name.trim();
     const roleSlug = (slug || roleName.toLowerCase().replace(/[^a-z0-9]+/g, '_')).trim();
@@ -469,9 +470,9 @@ const dbOps = {
 
     const now = new Date().toISOString();
     const result = db.prepare(`
-      INSERT INTO roles (name, slug, permissions, default_modules, status, is_system, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'active', 0, ?, ?)
-    `).run(roleName, roleSlug, JSON.stringify(permissions), JSON.stringify(default_modules), now, now);
+      INSERT INTO roles (name, slug, description, permissions, default_modules, status, is_system, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'active', 0, ?, ?)
+    `).run(roleName, roleSlug, description ? description.trim() : null, JSON.stringify(permissions), JSON.stringify(default_modules), now, now);
 
     return db.prepare('SELECT * FROM roles WHERE id = ?').get(result.lastInsertRowid);
   },

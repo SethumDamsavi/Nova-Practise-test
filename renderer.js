@@ -271,6 +271,177 @@ function updateWizardUserData(index, field, value) {
   }
 }
 
+// ==========================================
+// DYNAMIC ROLE CREATION & ROLE MANAGEMENT
+// ==========================================
+let createRoleContext = 'wizard'; // 'wizard' or 'in_app'
+
+function openCreateRoleModal(context = 'wizard') {
+  createRoleContext = context;
+  const form = document.getElementById('createRoleForm');
+  if (form) form.reset();
+  
+  const errEl = document.getElementById('createRoleError');
+  if (errEl) {
+    errEl.style.display = 'none';
+    errEl.textContent = '';
+  }
+
+  // Set default checkboxes (dashboard checked)
+  const chks = document.querySelectorAll('.new-role-module-chk');
+  chks.forEach(c => {
+    c.checked = (c.value === 'dashboard');
+  });
+
+  const modal = document.getElementById('createRoleModal');
+  if (modal) modal.classList.add('active');
+}
+
+async function handleCreateRoleSubmit(event) {
+  event.preventDefault();
+  const nameInput = document.getElementById('newRoleName');
+  const descInput = document.getElementById('newRoleDesc');
+  const errEl = document.getElementById('createRoleError');
+  if (errEl) errEl.style.display = 'none';
+
+  const name = nameInput ? nameInput.value.trim() : '';
+  const desc = descInput ? descInput.value.trim() : '';
+
+  if (!name) {
+    if (errEl) {
+      errEl.textContent = 'Role name is required.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  const selectedModules = Array.from(document.querySelectorAll('.new-role-module-chk:checked')).map(c => c.value);
+
+  try {
+    const createdRole = await window.api.createRole({
+      name: name,
+      description: desc,
+      default_modules: selectedModules,
+      permissions: []
+    });
+
+    // Refresh memory cache of database roles
+    const updatedRoles = await window.api.getRoles();
+    if (updatedRoles && updatedRoles.length > 0) {
+      allDatabaseRoles = updatedRoles;
+    }
+
+    closeModal('createRoleModal');
+
+    if (createRoleContext === 'wizard') {
+      renderWizardUserCards();
+      alert(`Role "${createdRole.name}" created successfully!\nYou can now select it from the role dropdown on user account cards.`);
+    } else {
+      await renderRoleManagementList();
+      alert(`Role "${createdRole.name}" created successfully!`);
+    }
+  } catch (error) {
+    console.error('Error creating role:', error);
+    if (errEl) {
+      errEl.textContent = error.message || 'Failed to create role.';
+      errEl.style.display = 'block';
+    } else {
+      alert(`Failed to create role: ${error.message}`);
+    }
+  }
+}
+
+async function openRoleManagementModal() {
+  const modal = document.getElementById('roleManagementModal');
+  if (modal) modal.classList.add('active');
+  await renderRoleManagementList();
+}
+
+async function renderRoleManagementList() {
+  const container = document.getElementById('roleManagementList');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 12px;">Loading roles...</div>';
+
+  try {
+    const roles = await window.api.getRoles();
+    allDatabaseRoles = roles;
+
+    if (!roles || roles.length === 0) {
+      container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 12px;">No roles found in database.</div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    roles.forEach(role => {
+      let modules = [];
+      try {
+        modules = typeof role.default_modules === 'string' ? JSON.parse(role.default_modules || '[]') : (role.default_modules || []);
+      } catch (e) {
+        modules = [];
+      }
+
+      const isSystem = Boolean(role.is_system);
+      const isActive = role.status === 'active';
+      const statusBadge = isActive 
+        ? '<span class="badge-status seen" style="font-size: 11px;">Active</span>'
+        : '<span class="badge-status" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; font-size: 11px;">Inactive</span>';
+      
+      const typeBadge = isSystem
+        ? '<span style="font-size: 10px; background: rgba(14, 165, 233, 0.15); color: var(--primary); padding: 2px 6px; border-radius: 4px; font-weight: 700;">SYSTEM</span>'
+        : '<span style="font-size: 10px; background: rgba(168, 85, 247, 0.15); color: #a855f7; padding: 2px 6px; border-radius: 4px; font-weight: 700;">CUSTOM</span>';
+
+      const modulePills = modules.length > 0 
+        ? modules.map(m => `<span style="font-size: 11px; background: var(--bg-hover); color: var(--text-secondary); padding: 2px 6px; border-radius: 4px;">${m}</span>`).join(' ')
+        : '<span style="font-size: 11px; color: var(--text-muted);">None</span>';
+
+      const card = document.createElement('div');
+      card.className = 'role-item-card';
+      card.style.cssText = 'background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px;';
+      
+      let toggleActionBtn = '';
+      if (!isSystem) {
+        const nextStatus = isActive ? 'inactive' : 'active';
+        const btnClass = isActive ? 'btn-danger' : 'btn-success';
+        const btnText = isActive ? 'Deactivate' : 'Activate';
+        toggleActionBtn = `<button type="button" class="btn ${btnClass} btn-xs" onclick="handleToggleRoleStatus(${role.id}, '${nextStatus}')">${btnText}</button>`;
+      }
+
+      card.innerHTML = `
+        <div style="flex: 1;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+            <strong style="font-size: 14px;">${role.name}</strong>
+            <code>${role.slug}</code>
+            ${typeBadge}
+            ${statusBadge}
+          </div>
+          ${role.description ? `<div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">${role.description}</div>` : ''}
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span style="font-size: 11px; color: var(--text-muted);">Default Modules:</span>
+            ${modulePills}
+          </div>
+        </div>
+        <div>
+          ${toggleActionBtn}
+        </div>
+      `;
+      container.appendChild(card);
+    });
+  } catch (err) {
+    console.error('Failed to load roles list:', err);
+    container.innerHTML = `<div style="color: #ef4444; padding: 10px;">Failed to load roles: ${err.message}</div>`;
+  }
+}
+
+async function handleToggleRoleStatus(roleId, newStatus) {
+  try {
+    await window.api.toggleRoleStatus(roleId, newStatus);
+    await renderRoleManagementList();
+  } catch (error) {
+    console.error('Failed to toggle role status:', error);
+    alert(error.message || 'Failed to update role status.');
+  }
+}
+
 function addNewWizardUserCard() {
   const defaultRole = allDatabaseRoles.find(r => r.slug === 'receptionist') || allDatabaseRoles[0] || { slug: 'receptionist' };
   wizardUsers.push({

@@ -85,7 +85,10 @@
       <div class="wizard-step-pane" id="wizardPane-2">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <div class="wizard-pane-title" style="margin-bottom: 0;">Step 2: Create User Accounts &amp; Roles</div>
-          <button type="button" class="btn btn-secondary btn-xs" onclick="addNewWizardUserCard()">+ Add Another User</button>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="openCreateRoleModal('wizard')">+ Add New Role</button>
+            <button type="button" class="btn btn-secondary btn-xs" onclick="addNewWizardUserCard()">+ Add Another User</button>
+          </div>
         </div>
         <p class="wizard-pane-desc">Create accounts with dynamic roles loaded from the database. Passwords will be securely hashed with SHA-256.</p>
 
@@ -245,6 +248,12 @@
           Financial Reports
         </a>
       </nav>
+
+      <!-- Role Management Button -->
+      <button class="theme-toggle-btn" onclick="openRoleManagementModal()" id="btnManageRoles" style="border-color: rgba(168, 85, 247, 0.4); margin-bottom: 8px;">
+        <svg style="width:16px;height:16px;stroke:#a855f7;fill:none;" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Role Management
+      </button>
 
       <!-- Cloud Sync Settings Button -->
       <button class="theme-toggle-btn" onclick="openSyncSettingsModal()" style="border-color: rgba(14, 165, 233, 0.4); margin-bottom: 8px;">
@@ -1414,6 +1423,88 @@
       </div>
       <div id="consultationDetailBody" style="padding: 10px 0;">
         <!-- Injected via renderer.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CREATE NEW ROLE -->
+  <div id="createRoleModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 540px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="account-role-badge doctor" style="background: rgba(168, 85, 247, 0.15); color: #a855f7;">ROLE SETUP</span>
+          <h3 class="modal-title">Create New Role</h3>
+        </div>
+        <button class="modal-close" onclick="closeModal('createRoleModal')">&times;</button>
+      </div>
+      <form id="createRoleForm" onsubmit="handleCreateRoleSubmit(event)">
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+          Define a new custom role with custom name and default module permissions.
+        </p>
+
+        <div id="createRoleError" class="login-error" style="display: none; margin-bottom: 12px;"></div>
+
+        <div class="form-group">
+          <label for="newRoleName">Role Name *</label>
+          <input type="text" id="newRoleName" required placeholder="e.g. Nurse Practitioner, Lab Technician, Cashier">
+        </div>
+
+        <div class="form-group">
+          <label for="newRoleDesc">Description</label>
+          <input type="text" id="newRoleDesc" placeholder="e.g. Clinical support and patient checkups">
+        </div>
+
+        <div class="form-group">
+          <label style="margin-bottom: 8px; display: block;">Default Module Access</label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: var(--bg-card); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="new-role-module-chk" value="dashboard" checked> Dashboard
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="new-role-module-chk" value="appointments"> Appointments
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="new-role-module-chk" value="consultations"> Consultations
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="new-role-module-chk" value="patient_registry"> Patient Registry
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="new-role-module-chk" value="pharmacy"> Pharmacy
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="new-role-module-chk" value="financial_reports"> Financial Reports
+            </label>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('createRoleModal')" style="flex: 1;">Cancel</button>
+          <button type="submit" class="btn btn-success" style="flex: 2; font-weight: 700;">Create Role</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: SYSTEM ROLE MANAGEMENT -->
+  <div id="roleManagementModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 780px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">System Role Management</h3>
+          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">View system default roles and manage custom roles with tailored module permissions.</div>
+        </div>
+        <button class="modal-close" onclick="closeModal('roleManagementModal')">&times;</button>
+      </div>
+      <div style="padding: 14px 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <span style="font-size: 13px; color: var(--text-muted);">Configured Roles in Database:</span>
+          <button type="button" class="btn btn-primary btn-xs" onclick="openCreateRoleModal('in_app')">+ Add New Role</button>
+        </div>
+
+        <div id="roleManagementList" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
+          <!-- Injected via renderer.js -->
+        </div>
       </div>
     </div>
   </div>
