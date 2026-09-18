@@ -191,17 +191,33 @@
           <label for="loginPassword">Password</label>
           <input type="password" id="loginPassword" required placeholder="••••••••" autocomplete="current-password">
         </div>
-        <div style="display: flex; justify-content: flex-end; margin-top: -6px; margin-bottom: 8px;">
-          <a href="#" onclick="openForgotPasswordModal(event)" style="font-size: 12px; color: var(--primary); text-decoration: none;">Forgot Password?</a>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: -4px; margin-bottom: 12px; gap: 6px;">
+          <a href="#" onclick="openCreateRoleModal('login')" style="font-size: 12px; color: #a855f7; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 600;">
+            <svg style="width: 14px; height: 14px; stroke: #a855f7; fill: none;" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            + Add Role
+          </a>
+          <a href="#" onclick="openRegisterUserModal()" style="font-size: 12px; color: var(--primary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 600;">
+            <svg style="width: 14px; height: 14px; stroke: var(--primary); fill: none;" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M16 11h6"/></svg>
+            + Add User
+          </a>
+          <a href="#" onclick="openForgotPasswordModal(event)" style="font-size: 12px; color: var(--text-muted); text-decoration: none;">Forgot Password?</a>
         </div>
         <button type="submit" class="btn" style="width: 100%;">Log In to Terminal</button>
       </form>
 
-      <div class="demo-credentials">
-        <strong>Default Role Logins:</strong>
-        <span>• Doctor: <code>doctor</code> / <code>doctor123</code></span>
-        <span>• Receptionist: <code>receptionist</code> / <code>receptionist123</code></span>
-        <span>• Pharmacist: <code>pharmacist</code> / <code>pharmacist123</code></span>
+      <div class="demo-credentials" id="loginDemoCredentialsBox" style="margin-top: 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <strong style="font-size: 11px;">Active Roles &amp; Accounts:</strong>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" class="btn btn-secondary btn-xs" style="font-size: 10px; padding: 2px 6px; border-color: rgba(168, 85, 247, 0.4); color: #c084fc;" onclick="openCreateRoleModal('login')">+ Role</button>
+            <button type="button" class="btn btn-secondary btn-xs" style="font-size: 10px; padding: 2px 6px; border-color: rgba(14, 165, 233, 0.4); color: var(--primary);" onclick="openRegisterUserModal()">+ User</button>
+          </div>
+        </div>
+        <div id="loginRolesListPreview">
+          <span>• Doctor: <code>doctor</code> / <code>doctor123</code></span>
+          <span>• Receptionist: <code>receptionist</code> / <code>receptionist123</code></span>
+          <span>• Pharmacist: <code>pharmacist</code> / <code>pharmacist123</code></span>
+        </div>
       </div>
     </div>
   </div>
@@ -1481,6 +1497,81 @@
         <div style="display: flex; gap: 10px; margin-top: 20px;">
           <button type="button" class="btn btn-secondary" onclick="closeModal('createRoleModal')" style="flex: 1;">Cancel</button>
           <button type="submit" class="btn btn-success" style="flex: 2; font-weight: 700;">Create Role</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: REGISTER USER ACCOUNT -->
+  <div id="registerUserModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 540px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="account-role-badge doctor" style="background: rgba(14, 165, 233, 0.15); color: var(--primary);">ACCOUNT</span>
+          <h3 class="modal-title">Register User Account</h3>
+        </div>
+        <button class="modal-close" onclick="closeModal('registerUserModal')">&times;</button>
+      </div>
+      <form id="registerUserForm" onsubmit="handleRegisterUserSubmit(event)">
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+          Create a new user account with any assigned system or custom role.
+        </p>
+
+        <div id="registerUserError" class="login-error" style="display: none; margin-bottom: 12px;"></div>
+
+        <div class="form-group">
+          <label for="regUserFullName">Full Name *</label>
+          <input type="text" id="regUserFullName" required placeholder="e.g. Dr. Kasun Silva or Nurse Anoma">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="regUserUsername">Username *</label>
+            <input type="text" id="regUserUsername" required placeholder="e.g. kasun or nurse1">
+          </div>
+          <div class="form-group">
+            <label for="regUserPassword">Password *</label>
+            <input type="password" id="regUserPassword" required minlength="6" placeholder="Min 6 characters">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label for="regUserRoleSelect" style="margin-bottom: 0;">Assigned Role *</label>
+            <button type="button" class="btn btn-secondary btn-xs" style="font-size: 10px; padding: 2px 6px; border-color: rgba(168, 85, 247, 0.4); color: #c084fc;" onclick="openCreateRoleModal('register_user')">+ Add New Role First</button>
+          </div>
+          <select id="regUserRoleSelect" required onchange="handleRegUserRoleChange(this.value)">
+            <!-- Populated dynamically via renderer.js -->
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label style="margin-bottom: 8px; display: block;">Assigned Module Permissions</label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: var(--bg-card); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="reg-user-module-chk" value="dashboard" checked> Dashboard
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="reg-user-module-chk" value="appointments"> Appointments
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="reg-user-module-chk" value="consultations"> Consultations
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="reg-user-module-chk" value="patient_registry"> Patient Registry
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="reg-user-module-chk" value="pharmacy"> Pharmacy
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" class="reg-user-module-chk" value="financial_reports"> Financial Reports
+            </label>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('registerUserModal')" style="flex: 1;">Cancel</button>
+          <button type="submit" class="btn btn-success" style="flex: 2; font-weight: 700;">Create &amp; Ready to Log In</button>
         </div>
       </form>
     </div>

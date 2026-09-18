@@ -336,6 +336,15 @@ async function handleCreateRoleSubmit(event) {
     if (createRoleContext === 'wizard') {
       renderWizardUserCards();
       alert(`Role "${createdRole.name}" created successfully!\nYou can now select it from the role dropdown on user account cards.`);
+    } else if (createRoleContext === 'register_user') {
+      await populateRegisterUserRoleDropdown();
+      const roleSel = document.getElementById('regUserRoleSelect');
+      if (roleSel) roleSel.value = createdRole.slug;
+      handleRegUserRoleChange(createdRole.slug);
+      alert(`Role "${createdRole.name}" created successfully and selected!`);
+    } else if (createRoleContext === 'login') {
+      await updateLoginRolesPreview();
+      alert(`Role "${createdRole.name}" created successfully!\nYou can now click "+ Add User" on the login screen to create an account with this role.`);
     } else {
       await renderRoleManagementList();
       alert(`Role "${createdRole.name}" created successfully!`);
@@ -439,6 +448,164 @@ async function handleToggleRoleStatus(roleId, newStatus) {
   } catch (error) {
     console.error('Failed to toggle role status:', error);
     alert(error.message || 'Failed to update role status.');
+  }
+}
+
+// ==========================================
+// USER REGISTRATION MODAL (LOGIN & SYSTEM)
+// ==========================================
+async function openRegisterUserModal() {
+  const form = document.getElementById('registerUserForm');
+  if (form) form.reset();
+
+  const errEl = document.getElementById('registerUserError');
+  if (errEl) {
+    errEl.style.display = 'none';
+    errEl.textContent = '';
+  }
+
+  await populateRegisterUserRoleDropdown();
+
+  const modal = document.getElementById('registerUserModal');
+  if (modal) modal.classList.add('active');
+}
+
+async function populateRegisterUserRoleDropdown() {
+  const select = document.getElementById('regUserRoleSelect');
+  if (!select) return;
+
+  try {
+    if (allDatabaseRoles.length === 0) {
+      const roles = await window.api.getRoles();
+      if (roles && roles.length > 0) allDatabaseRoles = roles;
+    }
+  } catch (e) {
+    console.warn('Could not fetch roles:', e);
+  }
+
+  const roles = allDatabaseRoles.length > 0 ? allDatabaseRoles : [
+    { name: 'Doctor', slug: 'doctor', default_modules: '["dashboard","appointments","consultations","patient_registry","pharmacy","financial_reports"]' },
+    { name: 'Receptionist', slug: 'receptionist', default_modules: '["dashboard","appointments","patient_registry"]' },
+    { name: 'Pharmacist', slug: 'pharmacist', default_modules: '["dashboard","pharmacy"]' }
+  ];
+
+  select.innerHTML = '';
+  roles.forEach(r => {
+    select.innerHTML += `<option value="${r.slug}">${r.name} (${r.slug})</option>`;
+  });
+
+  if (roles[0]) {
+    select.value = roles[0].slug;
+    handleRegUserRoleChange(roles[0].slug);
+  }
+}
+
+function handleRegUserRoleChange(roleSlug) {
+  const foundRole = allDatabaseRoles.find(r => r.slug === roleSlug);
+  let modules = [];
+  if (foundRole) {
+    try {
+      modules = typeof foundRole.default_modules === 'string' ? JSON.parse(foundRole.default_modules || '[]') : (foundRole.default_modules || []);
+    } catch (e) {
+      modules = ['dashboard'];
+    }
+  } else {
+    if (roleSlug === 'doctor') modules = allSystemModules.map(m => m.slug);
+    else if (roleSlug === 'receptionist') modules = ['dashboard', 'appointments', 'patient_registry'];
+    else if (roleSlug === 'pharmacist') modules = ['dashboard', 'pharmacy'];
+    else modules = ['dashboard'];
+  }
+
+  const chks = document.querySelectorAll('.reg-user-module-chk');
+  chks.forEach(c => {
+    c.checked = modules.includes(c.value);
+  });
+}
+
+async function handleRegisterUserSubmit(event) {
+  event.preventDefault();
+  const fullNameInp = document.getElementById('regUserFullName');
+  const userInp = document.getElementById('regUserUsername');
+  const passInp = document.getElementById('regUserPassword');
+  const roleSelect = document.getElementById('regUserRoleSelect');
+  const errEl = document.getElementById('registerUserError');
+  if (errEl) errEl.style.display = 'none';
+
+  const fullName = fullNameInp ? fullNameInp.value.trim() : '';
+  const username = userInp ? userInp.value.trim() : '';
+  const password = passInp ? passInp.value : '';
+  const roleSlug = roleSelect ? roleSelect.value : 'staff';
+
+  if (!fullName) {
+    if (errEl) { errEl.textContent = 'Full Name is required.'; errEl.style.display = 'block'; }
+    return;
+  }
+  if (!username) {
+    if (errEl) { errEl.textContent = 'Username is required.'; errEl.style.display = 'block'; }
+    return;
+  }
+  if (!password || password.length < 6) {
+    if (errEl) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; }
+    return;
+  }
+
+  const selectedModules = Array.from(document.querySelectorAll('.reg-user-module-chk:checked')).map(c => c.value);
+  const foundRole = allDatabaseRoles.find(r => r.slug === roleSlug);
+
+  try {
+    await window.api.createUser({
+      username: username,
+      password: password,
+      full_name: fullName,
+      role: roleSlug,
+      role_id: foundRole ? foundRole.id : null,
+      modules: selectedModules,
+      status: 'active'
+    });
+
+    closeModal('registerUserModal');
+
+    // Auto-fill login screen credentials
+    const loginUserEl = document.getElementById('loginUsername');
+    const loginPassEl = document.getElementById('loginPassword');
+    if (loginUserEl) loginUserEl.value = username;
+    if (loginPassEl) loginPassEl.value = password;
+
+    await updateLoginRolesPreview();
+
+    alert(`User "${username}" registered successfully!\nYour credentials have been filled into the login form. Click "Log In to Terminal" to proceed.`);
+  } catch (error) {
+    console.error('Failed to create user:', error);
+    if (errEl) {
+      errEl.textContent = error.message || 'Failed to create user.';
+      errEl.style.display = 'block';
+    } else {
+      alert(`Error creating user: ${error.message}`);
+    }
+  }
+}
+
+async function updateLoginRolesPreview() {
+  const container = document.getElementById('loginRolesListPreview');
+  if (!container) return;
+
+  try {
+    const roles = await window.api.getRoles();
+    if (roles && roles.length > 0) {
+      allDatabaseRoles = roles;
+    }
+    const users = await window.api.getUsers();
+
+    if (users && users.length > 0) {
+      let html = '';
+      users.slice(0, 8).forEach(u => {
+        const roleName = (u.role_name || u.role || 'Staff').toUpperCase();
+        html += `<span>• <strong>${roleName}:</strong> <code>${u.username}</code></span>`;
+      });
+      container.innerHTML = html;
+    }
+  } catch (e) {
+    console.warn('Could not update login roles preview:', e);
   }
 }
 
@@ -674,6 +841,7 @@ function showLoginScreen(show) {
   if (show) {
     loginOverlay.style.display = 'flex';
     appContainer.style.display = 'none';
+    updateLoginRolesPreview();
   } else {
     loginOverlay.style.display = 'none';
     appContainer.style.display = 'flex';

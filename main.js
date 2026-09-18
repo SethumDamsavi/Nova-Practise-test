@@ -245,11 +245,11 @@ async function runSyncCycle() {
   }
 
   const settings = dbOps.getSyncSettings();
-  const apiKey = settings.sync_api_key;
-  const baseUrl = settings.sync_base_url;
+  const apiKey = (settings.sync_api_key || '').trim();
+  const baseUrl = normalizeSyncBaseUrl(settings.sync_base_url || '');
 
-  // If live Cloudflare Worker sync credentials are configured
-  if (apiKey && baseUrl) {
+  // If live Cloudflare Worker sync credentials are configured with an active API key
+  if (apiKey && apiKey.length > 5 && baseUrl) {
     updateSyncStatus('syncing');
     lastSyncError = null;
 
