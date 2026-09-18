@@ -267,7 +267,9 @@ async function runSyncCycle() {
       updateSyncStatus('idle');
       return true;
     } catch (error) {
-      console.error('[Cloud Sync V1 Error]:', error.message);
+      if (lastSyncError !== error.message) {
+        console.error('[Cloud Sync V1 Error]:', error.message);
+      }
       lastSyncError = error.message;
 
       if (error.statusCode === 401) {

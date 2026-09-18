@@ -19,38 +19,28 @@
         </div>
       </div>
 
-      <!-- Step Indicator Bar (5 Steps) -->
+      <!-- Step Indicator Bar (3 Steps as sketched) -->
       <div class="wizard-stepper">
         <div class="wizard-step active" id="wizardStepIndicator-1">
           <div class="step-circle">1</div>
-          <div class="step-label">Installation</div>
+          <div class="step-label">Auth &amp; Sync</div>
         </div>
         <div class="step-line" id="wizardStepLine-1"></div>
         <div class="wizard-step" id="wizardStepIndicator-2">
           <div class="step-circle">2</div>
-          <div class="step-label">User Accounts</div>
+          <div class="step-label">User Accounts &amp; Access</div>
         </div>
         <div class="step-line" id="wizardStepLine-2"></div>
         <div class="wizard-step" id="wizardStepIndicator-3">
           <div class="step-circle">3</div>
-          <div class="step-label">Module Access</div>
-        </div>
-        <div class="step-line" id="wizardStepLine-3"></div>
-        <div class="wizard-step" id="wizardStepIndicator-4">
-          <div class="step-circle">4</div>
-          <div class="step-label">Review</div>
-        </div>
-        <div class="step-line" id="wizardStepLine-4"></div>
-        <div class="wizard-step" id="wizardStepIndicator-5">
-          <div class="step-circle">5</div>
-          <div class="step-label">Complete</div>
+          <div class="step-label">Review &amp; Done</div>
         </div>
       </div>
 
-      <!-- STEP 1: DATABASE & SYSTEM SYNC -->
+      <!-- STEP 1: AUTH & SYSTEM SYNC -->
       <div class="wizard-step-pane active" id="wizardPane-1">
-        <div class="wizard-pane-title">Step 1: Database &amp; System Configuration</div>
-        <p class="wizard-pane-desc">Synchronize and verify local clinical database schema, audit log tables, relational roles, and security policies.</p>
+        <div class="wizard-pane-title">Step 1: System Activation &amp; Sync</div>
+        <p class="wizard-pane-desc">Verify local clinical database storage, relational schema, audit log tables, and security policies.</p>
         
         <div class="system-status-box">
           <div class="status-row">
@@ -70,91 +60,58 @@
             <span class="badge-status seen">Doctor, Receptionist, Pharmacist</span>
           </div>
           <div class="status-row">
-            <span>Database Readiness:</span>
+            <span>System Readiness:</span>
             <span id="wizardDbStatusBadge" class="badge-status seen">✓ System Synchronized</span>
           </div>
         </div>
 
         <div class="wizard-actions">
           <div></div>
-          <button type="button" class="btn" onclick="goToWizardStep(2)">Next: User Accounts &rarr;</button>
+          <button type="button" class="btn" onclick="goToWizardStep(2)">Next: User Accounts &amp; Access &rarr;</button>
         </div>
       </div>
 
-      <!-- STEP 2: USER ACCOUNTS CREATION (DYNAMIC ROLES & MULTI-USER) -->
+      <!-- STEP 2: USER ACCOUNTS & ASSIGN ACCESS (WITH FULL ADMIN? CHECKBOX) -->
       <div class="wizard-step-pane" id="wizardPane-2">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <div class="wizard-pane-title" style="margin-bottom: 0;">Step 2: Create User Accounts &amp; Roles</div>
+          <div class="wizard-pane-title" style="margin-bottom: 0;">Step 2: User Accounts &amp; Access Control</div>
           <div style="display: flex; gap: 8px;">
             <button type="button" class="btn btn-secondary btn-xs" onclick="openCreateRoleModal('wizard')">+ Add New Role</button>
             <button type="button" class="btn btn-secondary btn-xs" onclick="addNewWizardUserCard()">+ Add Another User</button>
           </div>
         </div>
-        <p class="wizard-pane-desc">Create accounts with dynamic roles loaded from the database. Passwords will be securely hashed with SHA-256.</p>
+        <p class="wizard-pane-desc">Create user accounts with username, password, and assign module access. Use <strong>Full Admin?</strong> to quickly grant full system permissions.</p>
 
         <div id="wizardStep2Error" class="login-error" style="display: none; margin-bottom: 12px;"></div>
 
-        <!-- Dynamic User Accounts Container -->
-        <div class="accounts-grid" id="wizardUserAccountsContainer" style="max-height: 400px; overflow-y: auto; padding-right: 4px;">
+        <!-- Dynamic User Accounts Container (with embedded module permissions) -->
+        <div class="accounts-grid" id="wizardUserAccountsContainer" style="max-height: 440px; overflow-y: auto; padding-right: 4px;">
           <!-- Injected via renderer.js -->
         </div>
 
         <div class="wizard-actions">
           <button type="button" class="btn btn-secondary" onclick="goToWizardStep(1)">&larr; Back</button>
-          <button type="button" class="btn" onclick="validateStep2AndProceed()">Next: Module Access &rarr;</button>
+          <button type="button" class="btn" onclick="validateStep2AndProceed()">Next: Review &amp; Done &rarr;</button>
         </div>
       </div>
 
-      <!-- STEP 3: MODULE ACCESS ASSIGNMENT -->
+      <!-- STEP 3: REVIEW & DONE -->
       <div class="wizard-step-pane" id="wizardPane-3">
-        <div class="wizard-pane-title">Step 3: Assign Module Permissions</div>
-        <p class="wizard-pane-desc">Assign specific module permissions to each user. The backend and navigation will enforce these permissions.</p>
-
-        <!-- User Selector Dropdown -->
-        <div class="form-group" style="margin-bottom: 14px;">
-          <label for="wizardModuleUserSelect" style="font-weight: 700;">Select User to Configure Permissions:</label>
-          <select id="wizardModuleUserSelect" onchange="handleWizardModuleUserSelect(this.value)" style="font-weight: 600; padding: 8px 12px; font-size: 14px;">
-            <!-- Populated via renderer.js -->
-          </select>
-        </div>
-
-        <div class="module-selection-container">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
-            <div style="font-weight: 700; font-size: 14px;">Available System Modules:</div>
-            <label class="custom-checkbox-label" style="font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-              <input type="checkbox" id="wizSelectAllModules" onchange="toggleSelectAllModules(this.checked)">
-              <span>Select All Modules</span>
-            </label>
-          </div>
-
-          <div class="module-checkbox-grid" id="wizardModuleCheckboxGrid">
-            <!-- Checkboxes injected via renderer.js -->
-          </div>
-        </div>
-
-        <div class="wizard-actions">
-          <button type="button" class="btn btn-secondary" onclick="goToWizardStep(2)">&larr; Back</button>
-          <button type="button" class="btn" onclick="goToWizardStep(4)">Next: Review &amp; Confirm &rarr;</button>
-        </div>
-      </div>
-
-      <!-- STEP 4: REVIEW & CONFIRMATION -->
-      <div class="wizard-step-pane" id="wizardPane-4">
-        <div class="wizard-pane-title">Step 4: Review &amp; Confirmation</div>
-        <p class="wizard-pane-desc">Review all created user accounts, assigned roles, and module permissions before finalizing setup.</p>
+        <div class="wizard-pane-title">Step 3: Review &amp; Finalize Setup (Done)</div>
+        <p class="wizard-pane-desc">Review all created accounts, roles, and assigned module permissions before finalizing installation.</p>
 
         <div class="review-cards-container" id="wizardReviewCardsContainer" style="max-height: 400px; overflow-y: auto; padding-right: 4px;">
           <!-- Injected via renderer.js -->
         </div>
 
         <div class="wizard-actions">
-          <button type="button" class="btn btn-secondary" onclick="goToWizardStep(3)">&larr; Back</button>
-          <button type="button" class="btn btn-success" id="btnCompleteInstall" onclick="handleFinishInstallationSubmit()">Finish &amp; Complete Installation &rarr;</button>
+          <button type="button" class="btn btn-secondary" onclick="goToWizardStep(2)">&larr; Back</button>
+          <button type="button" class="btn btn-success" id="btnCompleteInstall" onclick="handleFinishInstallationSubmit()">✓ Done - Complete Installation &rarr;</button>
         </div>
       </div>
 
-      <!-- STEP 5: COMPLETE INSTALLATION -->
-      <div class="wizard-step-pane" id="wizardPane-5">
+      <!-- STEP 4: COMPLETE / SUCCESS BANNER -->
+      <div class="wizard-step-pane" id="wizardPane-4">
         <div style="text-align: center; padding: 30px 10px;">
           <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 32px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
             ✓
@@ -218,6 +175,12 @@
           <span>• Receptionist: <code>receptionist</code> / <code>receptionist123</code></span>
           <span>• Pharmacist: <code>pharmacist</code> / <code>pharmacist123</code></span>
         </div>
+      </div>
+
+      <div style="text-align: center; margin-top: 14px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+        <a href="#" onclick="relaunchInstallationWizard()" style="font-size: 11px; color: var(--text-muted); text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
+          <span>⚙️ Launch First-Time Setup Wizard</span>
+        </a>
       </div>
     </div>
   </div>

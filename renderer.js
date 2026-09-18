@@ -141,8 +141,8 @@ async function openInstallationWizard() {
 function goToWizardStep(step) {
   wizardCurrentStep = step;
 
-  // Update 5-step indicators and panels
-  for (let i = 1; i <= 5; i++) {
+  // Update 3-step indicators and panels (Step 4 is the completion banner)
+  for (let i = 1; i <= 4; i++) {
     const stepEl = document.getElementById(`wizardStepIndicator-${i}`);
     const lineEl = document.getElementById(`wizardStepLine-${i}`);
     const paneEl = document.getElementById(`wizardPane-${i}`);
@@ -167,14 +167,11 @@ function goToWizardStep(step) {
   if (step === 2) {
     renderWizardUserCards();
   } else if (step === 3) {
-    populateWizardModuleUserSelect();
-    renderWizardModuleCheckboxes();
-  } else if (step === 4) {
     renderWizardReviewSummary();
   }
 }
 
-// STEP 2: USER CARDS & DYNAMIC ROLE RENDERING
+// STEP 2: USER CARDS & DYNAMIC ROLE RENDERING WITH INLINE MODULE ACCESS & FULL ADMIN?
 function renderWizardUserCards() {
   const container = document.getElementById('wizardUserAccountsContainer');
   if (!container) return;
@@ -198,6 +195,37 @@ function renderWizardUserCards() {
     });
 
     const roleBadgeClass = u.role_slug === 'doctor' ? 'doctor' : (u.role_slug === 'pharmacist' ? 'pharmacist' : 'receptionist');
+
+    // Ensure default module assignments
+    if (!wizardUserModules[u.username]) {
+      if (u.role_slug === 'doctor') {
+        wizardUserModules[u.username] = allSystemModules.map(m => m.slug);
+      } else if (u.role_slug === 'receptionist') {
+        wizardUserModules[u.username] = ['dashboard', 'appointments', 'patient_registry'];
+      } else if (u.role_slug === 'pharmacist') {
+        wizardUserModules[u.username] = ['dashboard', 'pharmacy'];
+      } else {
+        const foundRole = allDatabaseRoles.find(r => r.slug === u.role_slug);
+        try {
+          wizardUserModules[u.username] = foundRole && foundRole.default_modules ? JSON.parse(foundRole.default_modules) : ['dashboard'];
+        } catch (e) {
+          wizardUserModules[u.username] = ['dashboard'];
+        }
+      }
+    }
+
+    const assignedMods = wizardUserModules[u.username] || [];
+    const isFullAdmin = allSystemModules.length > 0 && assignedMods.length === allSystemModules.length;
+
+    const modulesCheckboxesHtml = allSystemModules.map(mod => {
+      const isChecked = assignedMods.includes(mod.slug);
+      return `
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; background: var(--bg-card); padding: 6px 8px; border-radius: 6px; border: 1px solid ${isChecked ? 'rgba(14, 165, 233, 0.4)' : 'var(--border-color)'};">
+          <input type="checkbox" class="wiz-user-mod-${idx}" value="${mod.slug}" ${isChecked ? 'checked' : ''} onchange="handleWizardUserModuleToggle(${idx}, '${mod.slug}', this.checked)">
+          <span style="${isChecked ? 'color: var(--text-primary); font-weight: 600;' : 'color: var(--text-muted);'}">${mod.name}</span>
+        </label>
+      `;
+    }).join('');
 
     card.innerHTML = `
       <div class="account-card-header">
@@ -235,9 +263,52 @@ function renderWizardUserCards() {
           </select>
         </div>
       </div>
+
+      <!-- INLINE MODULE ACCESS CONFIGURATION (As sketched) -->
+      <div style="background: rgba(15, 23, 42, 0.45); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; margin-top: 4px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+          <span style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">Assign Access (Modules):</span>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #38bdf8; cursor: pointer;">
+            <input type="checkbox" id="wizFullAdmin-${idx}" ${isFullAdmin ? 'checked' : ''} onchange="toggleWizardUserFullAdmin(${idx}, this.checked)">
+            <span>Full Admin? (Select all modules)</span>
+          </label>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
+          ${modulesCheckboxesHtml}
+        </div>
+      </div>
     `;
     container.appendChild(card);
   });
+}
+
+function toggleWizardUserFullAdmin(userIndex, isFullAdmin) {
+  const user = wizardUsers[userIndex];
+  if (!user) return;
+  if (isFullAdmin) {
+    wizardUserModules[user.username] = allSystemModules.map(m => m.slug);
+  } else {
+    wizardUserModules[user.username] = ['dashboard'];
+  }
+  renderWizardUserCards();
+}
+
+function handleWizardUserModuleToggle(userIndex, moduleSlug, isChecked) {
+  const user = wizardUsers[userIndex];
+  if (!user) return;
+  let list = wizardUserModules[user.username] || [];
+  if (isChecked) {
+    if (!list.includes(moduleSlug)) list.push(moduleSlug);
+  } else {
+    list = list.filter(s => s !== moduleSlug);
+  }
+  wizardUserModules[user.username] = list;
+
+  // Update Full Admin checkbox state
+  const fullAdminChk = document.getElementById(`wizFullAdmin-${userIndex}`);
+  if (fullAdminChk) {
+    fullAdminChk.checked = allSystemModules.length > 0 && list.length === allSystemModules.length;
+  }
 }
 
 function updateWizardUserData(index, field, value) {
@@ -251,16 +322,22 @@ function updateWizardUserData(index, field, value) {
       badge.textContent = value.toUpperCase();
       badge.className = `account-role-badge ${value === 'doctor' ? 'doctor' : (value === 'pharmacist' ? 'pharmacist' : 'receptionist')}`;
     }
-    // Update default module assignments if not customized yet
-    if (!wizardUserModules[wizardUsers[index].username]) {
-      if (value === 'doctor') {
-        wizardUserModules[wizardUsers[index].username] = allSystemModules.map(m => m.slug);
-      } else if (value === 'receptionist') {
-        wizardUserModules[wizardUsers[index].username] = ['dashboard', 'appointments', 'patient_registry'];
-      } else if (value === 'pharmacist') {
-        wizardUserModules[wizardUsers[index].username] = ['dashboard', 'pharmacy'];
+    // Update default module assignments based on role
+    if (value === 'doctor') {
+      wizardUserModules[wizardUsers[index].username] = allSystemModules.map(m => m.slug);
+    } else if (value === 'receptionist') {
+      wizardUserModules[wizardUsers[index].username] = ['dashboard', 'appointments', 'patient_registry'];
+    } else if (value === 'pharmacist') {
+      wizardUserModules[wizardUsers[index].username] = ['dashboard', 'pharmacy'];
+    } else {
+      const foundRole = allDatabaseRoles.find(r => r.slug === value);
+      try {
+        wizardUserModules[wizardUsers[index].username] = foundRole && foundRole.default_modules ? JSON.parse(foundRole.default_modules) : ['dashboard'];
+      } catch (e) {
+        wizardUserModules[wizardUsers[index].username] = ['dashboard'];
       }
     }
+    renderWizardUserCards();
   }
 
   if (field === 'username' && oldUsername !== value) {
@@ -813,7 +890,7 @@ async function handleFinishInstallationSubmit() {
     }));
 
     await window.api.completeInstallation({ users: payload });
-    goToWizardStep(5);
+    goToWizardStep(4);
   } catch (error) {
     console.error('Installation setup error:', error);
     alert('Installation setup error: ' + error.message);
@@ -826,6 +903,18 @@ function finishInstallationAndGoToLogin() {
   const wizardOverlay = document.getElementById('installationWizardOverlay');
   if (wizardOverlay) wizardOverlay.style.display = 'none';
   showLoginScreen(true);
+}
+
+function relaunchInstallationWizard() {
+  const wizardOverlay = document.getElementById('installationWizardOverlay');
+  const loginOverlay = document.getElementById('loginScreen');
+  const appContainer = document.getElementById('appContainer');
+
+  if (wizardOverlay) wizardOverlay.style.display = 'flex';
+  if (loginOverlay) loginOverlay.style.display = 'none';
+  if (appContainer) appContainer.style.display = 'none';
+
+  goToWizardStep(1);
 }
 
 // ==========================================
