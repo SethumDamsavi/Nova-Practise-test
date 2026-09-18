@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NovoPractise Mobile Clinic Portal</title>
+  <style>
+    :root {
+      --bg-primary: #0a0f1d;
+      --bg-secondary: #131930;
+      --bg-card: rgba(22, 30, 58, 0.9);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --primary: #0ea5e9;
+      --primary-gradient: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
+      --accent-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      padding: 16px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    header {
+      text-align: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .logo-text {
+      font-size: 20px;
+      font-weight: 800;
+      background: var(--primary-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: var(--primary);
+    }
+
+    .patient-field {
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .patient-label {
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .patient-value {
+      font-weight: 600;
+    }
+
+    .btn {
+      background: var(--primary-gradient);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .btn-success {
+      background: var(--accent-gradient);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+
+    /* Webcam Capture and Scanner Preview Styling */
+    #scannerContainer {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .video-preview {
+      width: 100%;
+      max-width: 320px;
+      aspect-ratio: 4/3;
+      border-radius: 12px;
+      overflow: hidden;
+      background: black;
+      border: 2px solid var(--primary);
+    }
+
+    #previewCanvas {
+      display: none;
+    }
+
+    #photoPreviewContainer {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .image-preview {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      max-height: 300px;
+      object-fit: contain;
+    }
+
+    .status-msg {
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: center;
+      display: none;
+    }
+
+    .status-msg.success {
+      background: rgba(16, 185, 129, 0.1);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .status-msg.error {
+      background: rgba(244, 63, 94, 0.1);
+      color: #f43f5e;
+      border: 1px solid rgba(244, 63, 94, 0.2);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="logo-text">NovoPractise Mobile Portal</div>
+      <p style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">Clinic Offline Wi-Fi Uploads</p>
+    </header>
+
+    <div id="statusAlert" class="status-msg"></div>
+
+    <!-- PATIENT PROFILE DETAILED CARD -->
+    <div class="card" id="patientCard" style="display: none;">
+      <div class="card-title">Active Patient profile</div>
+      <div class="patient-field">
+        <div class="patient-label">Patient ID</div>
+        <div class="patient-value" id="patId">SL-PT-0001</div>
+      </div>
+      <div class="patient-field">
+        <div class="patient-label">Full Name</div>
+        <div class="patient-value" id="patName">Kasun Perera</div>
+      </div>
+      <div class="patient-field">
+        <div class="patient-label">Age / Gender</div>
+        <div class="patient-value" id="patAgeGender">42 yrs / Male</div>
+      </div>
+      
+      <!-- Native Camera Snapper button -->
+      <button class="btn" onclick="triggerCameraInput()">
+        <svg style="width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Snap Wound/Lab Photo
+      </button>
+      <input type="file" accept="image/*" capture="environment" id="cameraInput" style="display: none;" onchange="handlePhotoCapture(this)">
+
+      <!-- OR scan code to switch profile -->
+      <button class="btn btn-secondary" onclick="startQRScanner()">
+        <svg style="width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/></svg>
+        Scan Patient Card QR
+      </button>
+    </div>
+
+    <!-- PHOTO UPLOAD WORK AREA -->
+    <div class="card" id="photoPreviewContainer">
+      <div class="card-title">Confirm Image Upload</div>
+      <img id="capturedImage" class="image-preview" src="" alt="Capture Preview">
+      
+      <div class="form-group" style="width: 100%; display: flex; flex-direction: column; gap: 6px; margin: 10px 0;">
+        <label style="font-size: 12px; color: var(--text-secondary); font-weight: 600;">Image Description / Label</label>
+        <input type="text" id="imageDesc" placeholder="e.g. Wound progress Day 3" style="padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: white; outline: none; font-size: 14px;">
+      </div>
+
+      <button class="btn btn-success" onclick="uploadCapturedPhoto()">Upload to Clinic Desktop</button>
+      <button class="btn btn-secondary" onclick="cancelUpload()">Cancel</button>
+    </div>
+
+    <!-- QR CODE SCANNER PANEL -->
+    <div class="card" id="scannerContainer">
+      <div class="card-title">Scanning Patient QR Code...</div>
+      <video id="webcamVideo" class="video-preview" autoplay playsinline></video>
+      <canvas id="previewCanvas"></canvas>
+      <button class="btn btn-secondary" onclick="stopQRScanner()">Close Scanner</button>
+    </div>
+
+    <!-- NO PATIENT STATE CARD -->
+    <div class="card" id="noPatientCard">
+      <div class="card-title">Scan Patient QR Link</div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;">
+        Scan the QR code displayed on the desktop Patient Profile screen to view their profile, take wound photos, and upload clinical files.
+      </p>
+      <button class="btn" onclick="startQRScanner()">
+        <svg style="width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/></svg>
+        Open QR Reader
+      </button>
+    </div>
+  </div>
+
+  <!-- OFFLINE QR DECODER SCRIPT -->
+  <script src="/jsQR.js"></script>
+
+  <script>
+    let activePatientId = null;
+    let qrVideoTrack = null;
+    let qrAnimationFrameId = null;
+    let capturedBase64Data = null;
+    let capturedFileName = null;
+
+    // Load active patient from query URL
+    window.addEventListener('load', () => {
+      const params = new URLSearchParams(window.location.search);
+      const patientId = params.get('patientId');
+      if (patientId) {
+        loadPatientProfile(patientId);
+      }
+    });
+
+    async function loadPatientProfile(id) {
+      showLoading(true);
+      try {
+        const response = await fetch(`/api/mobile/patient?id=${id}`);
+        if (!response.ok) throw new Error('Patient not found');
+
+        const patient = await response.json();
+        activePatientId = patient.id;
+
+        document.getElementById('patId').textContent = patient.id;
+        document.getElementById('patName').textContent = patient.name;
+        document.getElementById('patAgeGender').textContent = `${patient.age} yrs / ${patient.gender}`;
+
+        document.getElementById('noPatientCard').style.display = 'none';
+        document.getElementById('patientCard').style.display = 'block';
+        showLoading(false);
+      } catch (error) {
+        showStatus('Error loading patient details. Make sure you are on the same Wi-Fi network.', 'error');
+        showLoading(false);
+      }
+    }
+
+    function triggerCameraInput() {
+      document.getElementById('cameraInput').click();
+    }
+
+    function handlePhotoCapture(input) {
+      if (input.files && input.files[0]) {
+        const file = input.files[0];
+        capturedFileName = file.name;
+        
+        // Show loading status
+        showStatus('Processing image...', 'success');
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          capturedBase64Data = e.target.result;
+          
+          // Show photo confirmation panel
+          document.getElementById('capturedImage').src = capturedBase64Data;
+          document.getElementById('patientCard').style.display = 'none';
+          document.getElementById('photoPreviewContainer').style.display = 'flex';
+          
+          document.getElementById('statusAlert').style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    async function uploadCapturedPhoto() {
+      if (!activePatientId || !capturedBase64Data) return;
+
+      const descInput = document.getElementById('imageDesc').value.trim();
+      const filename = descInput ? `${descInput.replace(/\s+/g, '_')}.jpg` : capturedFileName || 'mobile_photo.jpg';
+
+      showStatus('Uploading image to desktop clinic...', 'success');
+      showLoading(true);
+
+      try {
+        const response = await fetch('/api/mobile/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            patientId: activePatientId,
+            fileName: filename,
+            fileData: capturedBase64Data
+          })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          showStatus('✓ Upload completed! Refresh desktop view to see photo.', 'success');
+          cancelUpload();
+        } else {
+          throw new Error(result.error || 'Upload failed');
+        }
+      } catch (error) {
+        showStatus(`Upload failed: ${error.message}`, 'error');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    function cancelUpload() {
+      document.getElementById('photoPreviewContainer').style.display = 'none';
+      document.getElementById('patientCard').style.display = 'block';
+      document.getElementById('cameraInput').value = '';
+      document.getElementById('imageDesc').value = '';
+      capturedBase64Data = null;
+      capturedFileName = null;
+    }
+
+    // QR CODE SCANNER CODE
+    function startQRScanner() {
+      document.getElementById('noPatientCard').style.display = 'none';
+      document.getElementById('patientCard').style.display = 'none';
+      document.getElementById('scannerContainer').style.display = 'flex';
+
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then((stream) => {
+          const video = document.getElementById('webcamVideo');
+          video.srcObject = stream;
+          video.setAttribute("playsinline", true);
+          video.play();
+          qrVideoTrack = stream.getVideoTracks()[0];
+          
+          // Start decoding loop
+          qrAnimationFrameId = requestAnimationFrame(scanQRFrame);
+        })
+        .catch((error) => {
+          showStatus('Unable to access mobile camera for QR scanner.', 'error');
+          stopQRScanner();
+        });
+    }
+
+    function stopQRScanner() {
+      if (qrVideoTrack) {
+        qrVideoTrack.stop();
+        qrVideoTrack = null;
+      }
+      if (qrAnimationFrameId) {
+        cancelAnimationFrame(qrAnimationFrameId);
+        qrAnimationFrameId = null;
+      }
+
+      document.getElementById('scannerContainer').style.display = 'none';
+      if (activePatientId) {
+        document.getElementById('patientCard').style.display = 'block';
+      } else {
+        document.getElementById('noPatientCard').style.display = 'block';
+      }
+    }
+
+    function scanQRFrame() {
+      const video = document.getElementById('webcamVideo');
+      const canvas = document.getElementById('previewCanvas');
+      
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        const ctx = canvas.getContext('2d');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        // jsQR decoder
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert",
+        });
+
+        if (code) {
+          // Detected a QR code
+          console.log("Found QR code", code.data);
+          
+          try {
+            const url = new URL(code.data);
+            const patId = url.searchParams.get('patientId');
+            if (patId) {
+              stopQRScanner();
+              // Redirect to active patient
+              window.history.pushState({}, '', `/mobile?patientId=${patId}`);
+              loadPatientProfile(patId);
+              return;
+            }
+          } catch (e) {
+            // Check if string matches patient code format (e.g. SL-PT-XXXX)
+            if (code.data.startsWith('SL-PT-')) {
+              stopQRScanner();
+              window.history.pushState({}, '', `/mobile?patientId=${code.data}`);
+              loadPatientProfile(code.data);
+              return;
+            }
+          }
+        }
+      }
+      qrAnimationFrameId = requestAnimationFrame(scanQRFrame);
+    }
+
+    // Helper functions
+    function showStatus(msg, type) {
+      const el = document.getElementById('statusAlert');
+      el.textContent = msg;
+      el.className = `status-msg ${type}`;
+      el.style.display = 'block';
+      
+      if (type === 'success') {
+        setTimeout(() => {
+          el.style.display = 'none';
+        }, 5000);
+      }
+    }
+
+    function showLoading(loading) {
+      const btns = document.querySelectorAll('.btn');
+      btns.forEach(btn => {
+        if (loading) {
+          btn.setAttribute('disabled', 'true');
+          btn.style.opacity = '0.6';
+        } else {
+          btn.removeAttribute('disabled');
+          btn.style.opacity = '1';
+        }
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,1451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NovoPractise Clinic Management</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- FIRST INSTALLATION / INITIAL SETUP WIZARD OVERLAY -->
+  <div id="installationWizardOverlay" class="login-overlay wizard-overlay" style="display: none;">
+    <div class="wizard-card">
+      <div class="wizard-header">
+        <div class="logo-icon" style="width: 48px; height: 48px; font-size: 22px;">NP</div>
+        <div>
+          <h2 style="font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Doctor Management System Setup</h2>
+          <p style="font-size: 13px; color: var(--text-secondary);">First-Time Installation &amp; Role-Based Security Configuration</p>
+        </div>
+      </div>
+
+      <!-- Step Indicator Bar -->
+      <div class="wizard-stepper">
+        <div class="wizard-step active" id="wizardStepIndicator-1">
+          <div class="step-circle">1</div>
+          <div class="step-label">Installation</div>
+        </div>
+        <div class="step-line" id="wizardStepLine-1"></div>
+        <div class="wizard-step" id="wizardStepIndicator-2">
+          <div class="step-circle">2</div>
+          <div class="step-label">User Accounts</div>
+        </div>
+        <div class="step-line" id="wizardStepLine-2"></div>
+        <div class="wizard-step" id="wizardStepIndicator-3">
+          <div class="step-circle">3</div>
+          <div class="step-label">Module Access</div>
+        </div>
+        <div class="step-line" id="wizardStepLine-3"></div>
+        <div class="wizard-step" id="wizardStepIndicator-4">
+          <div class="step-circle">4</div>
+          <div class="step-label">Complete</div>
+        </div>
+      </div>
+
+      <!-- STEP 1: DATABASE & SYSTEM SYNC -->
+      <div class="wizard-step-pane active" id="wizardPane-1">
+        <div class="wizard-pane-title">Step 1: Database &amp; System Configuration</div>
+        <p class="wizard-pane-desc">Synchronize and verify local clinical database schema, audit log tables, relational roles, and security policies.</p>
+        
+        <div class="system-status-box">
+          <div class="status-row">
+            <span>Database Storage:</span>
+            <strong style="color: var(--primary);">clinic.db (SQLite WAL Mode)</strong>
+          </div>
+          <div class="status-row">
+            <span>Relational Schema:</span>
+            <span class="badge-status seen">users, roles, modules, user_module_permissions, consultations</span>
+          </div>
+          <div class="status-row">
+            <span>Security Engine:</span>
+            <span>SHA-256 One-Way Password Hashing</span>
+          </div>
+          <div class="status-row">
+            <span>Database Readiness:</span>
+            <span id="wizardDbStatusBadge" class="badge-status seen">✓ System Synchronized</span>
+          </div>
+        </div>
+
+        <div class="wizard-actions">
+          <div></div>
+          <button type="button" class="btn" onclick="goToWizardStep(2)">Next: Create User Accounts &rarr;</button>
+        </div>
+      </div>
+
+      <!-- STEP 2: USER ACCOUNTS CREATION -->
+      <div class="wizard-step-pane" id="wizardPane-2">
+        <div class="wizard-pane-title">Step 2: Create Initial User Accounts</div>
+        <p class="wizard-pane-desc">Set up credentials for Doctor and Receptionist. Credentials will be securely hashed before being stored in the database.</p>
+
+        <div id="wizardStep2Error" class="login-error" style="display: none; margin-bottom: 12px;"></div>
+
+        <div class="accounts-grid">
+          <!-- Doctor Account Form -->
+          <div class="account-card">
+            <div class="account-card-header">
+              <span class="account-role-badge doctor">DOCTOR</span>
+              <span style="font-size: 11px; color: var(--text-muted);">Primary Clinician</span>
+            </div>
+            <div class="form-group">
+              <label for="wizDoctorName">Full Name *</label>
+              <input type="text" id="wizDoctorName" placeholder="e.g. Dr. John Silva" value="Dr. John Silva" required>
+            </div>
+            <div class="form-group">
+              <label for="wizDoctorUsername">Username *</label>
+              <input type="text" id="wizDoctorUsername" placeholder="doctor" value="doctor" required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="wizDoctorPassword">Password * (Min 6 characters)</label>
+              <input type="password" id="wizDoctorPassword" placeholder="••••••••" value="doctor123" required autocomplete="new-password">
+            </div>
+          </div>
+
+          <!-- Receptionist Account Form -->
+          <div class="account-card">
+            <div class="account-card-header">
+              <span class="account-role-badge receptionist">RECEPTIONIST</span>
+              <span style="font-size: 11px; color: var(--text-muted);">Front Desk &amp; Registration</span>
+            </div>
+            <div class="form-group">
+              <label for="wizReceptionistName">Full Name *</label>
+              <input type="text" id="wizReceptionistName" placeholder="e.g. Kamal Silva" value="Kamal Silva" required>
+            </div>
+            <div class="form-group">
+              <label for="wizReceptionistUsername">Username *</label>
+              <input type="text" id="wizReceptionistUsername" placeholder="receptionist" value="receptionist" required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="wizReceptionistPassword">Password * (Min 6 characters)</label>
+              <input type="password" id="wizReceptionistPassword" placeholder="••••••••" value="receptionist123" required autocomplete="new-password">
+            </div>
+          </div>
+        </div>
+
+        <div class="wizard-actions">
+          <button type="button" class="btn btn-secondary" onclick="goToWizardStep(1)">&larr; Back</button>
+          <button type="button" class="btn" onclick="validateStep2AndProceed()">Next: Assign Module Access &rarr;</button>
+        </div>
+      </div>
+
+      <!-- STEP 3: MODULE ACCESS ASSIGNMENT -->
+      <div class="wizard-step-pane" id="wizardPane-3">
+        <div class="wizard-pane-title">Step 3: Assign Module Permissions</div>
+        <p class="wizard-pane-desc">Assign specific module permissions to each user. The backend and navigation will enforce these permissions.</p>
+
+        <!-- User Tab Switcher for Module Assignment -->
+        <div class="module-user-switcher">
+          <button type="button" id="wizUserTabDoctor" class="tab-btn active" onclick="switchWizardModuleUser('doctor')">
+            👨‍⚕️ Doctor (<span id="wizDocNamePreview">Dr. John Silva</span>)
+          </button>
+          <button type="button" id="wizUserTabReceptionist" class="tab-btn" onclick="switchWizardModuleUser('receptionist')">
+            📋 Receptionist (<span id="wizRecNamePreview">Kamal Silva</span>)
+          </button>
+        </div>
+
+        <div class="module-selection-container">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
+            <div style="font-weight: 700; font-size: 14px;">Available System Modules:</div>
+            <label class="custom-checkbox-label" style="font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              <input type="checkbox" id="wizSelectAllModules" onchange="toggleSelectAllModules(this.checked)">
+              <span>Select All Modules</span>
+            </label>
+          </div>
+
+          <div class="module-checkbox-grid" id="wizardModuleCheckboxGrid">
+            <!-- Checkboxes injected via renderer.js -->
+          </div>
+        </div>
+
+        <div class="wizard-actions">
+          <button type="button" class="btn btn-secondary" onclick="goToWizardStep(2)">&larr; Back</button>
+          <button type="button" class="btn" onclick="goToWizardStep(4)">Next: Review &amp; Confirm &rarr;</button>
+        </div>
+      </div>
+
+      <!-- STEP 4: REVIEW & CONFIRMATION -->
+      <div class="wizard-step-pane" id="wizardPane-4">
+        <div class="wizard-pane-title">Step 4: Review &amp; Confirmation</div>
+        <p class="wizard-pane-desc">Review your system setup before finalizing the installation.</p>
+
+        <div class="review-cards-container">
+          <div class="review-card">
+            <div style="font-weight: 700; color: var(--primary); margin-bottom: 6px;" id="reviewDocTitle">Doctor Account</div>
+            <div style="font-size: 13px; margin-bottom: 4px;">Name: <strong id="reviewDocName">-</strong></div>
+            <div style="font-size: 13px; margin-bottom: 8px;">Username: <code id="reviewDocUser">-</code></div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Assigned Modules:</div>
+            <div id="reviewDocModules" class="tags-container"></div>
+          </div>
+
+          <div class="review-card">
+            <div style="font-weight: 700; color: #10b981; margin-bottom: 6px;" id="reviewRecTitle">Receptionist Account</div>
+            <div style="font-size: 13px; margin-bottom: 4px;">Name: <strong id="reviewRecName">-</strong></div>
+            <div style="font-size: 13px; margin-bottom: 8px;">Username: <code id="reviewRecUser">-</code></div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Assigned Modules:</div>
+            <div id="reviewRecModules" class="tags-container"></div>
+          </div>
+        </div>
+
+        <div id="wizardCompletionSuccess" style="display: none; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 16px; margin-top: 16px; text-align: center;">
+          <div style="font-size: 18px; font-weight: 700; color: #10b981; margin-bottom: 4px;">✓ Installation Completed</div>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">Your Doctor Management System is ready for operation.</p>
+          <button type="button" class="btn btn-success" style="width: 100%;" onclick="finishInstallationAndGoToLogin()">Continue to Login</button>
+        </div>
+
+        <div class="wizard-actions" id="wizardStep4Actions">
+          <button type="button" class="btn btn-secondary" onclick="goToWizardStep(3)">&larr; Back</button>
+          <button type="button" class="btn btn-success" id="btnCompleteInstall" onclick="handleFinishInstallationSubmit()">Finish &amp; Complete Installation</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGIN OVERLAY -->
+  <div id="loginScreen" class="login-overlay">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="logo-icon">NP</div>
+        <h2 style="font-size: 20px; font-weight: 700;">NovoPractise</h2>
+        <p style="font-size: 12px; color: var(--text-secondary);">Clinic Operations &amp; Clinical Workstation</p>
+      </div>
+
+      <div id="loginErrorMsg" class="login-error">Invalid username or password.</div>
+
+      <form id="loginForm" onsubmit="handleLoginSubmit(event)">
+        <div class="form-group">
+          <label for="loginUsername">Username</label>
+          <input type="text" id="loginUsername" required placeholder="Enter username" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" required placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: -6px; margin-bottom: 8px;">
+          <a href="#" onclick="openForgotPasswordModal(event)" style="font-size: 12px; color: var(--primary); text-decoration: none;">Forgot Password?</a>
+        </div>
+        <button type="submit" class="btn" style="width: 100%;">Log In to Terminal</button>
+      </form>
+
+      <div class="demo-credentials">
+        <strong>Default Role Logins:</strong>
+        <span>• Doctor: <code>doctor</code> / <code>doctor123</code></span>
+        <span>• Receptionist: <code>receptionist</code> / <code>receptionist123</code></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPLICATION SHELL -->
+  <div class="app-container" id="appContainer" style="display: none;">
+    
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="sidebar">
+      <div class="logo-container">
+        <div class="logo-icon">NP</div>
+        <div class="logo-text">NovoPractise</div>
+      </div>
+
+      <!-- Logged-in User Info Badge -->
+      <div class="user-badge" id="userBadge">
+        <div class="user-name" id="loggedInUserName">Retrieving...</div>
+        <div class="user-roles" id="loggedInUserRoles">...</div>
+      </div>
+
+      <nav class="nav-menu" id="sidebarNavMenu">
+        <a class="nav-item active" onclick="switchScreen('dashboard')" id="nav-item-dashboard" data-module="dashboard">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-item" onclick="switchScreen('appointments')" id="nav-item-appointments" data-module="appointments">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Appointments
+        </a>
+        <a class="nav-item" onclick="switchScreen('consultations')" id="nav-item-consultations" data-module="consultations">
+          <svg viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
+          Consultations
+        </a>
+        <a class="nav-item" onclick="switchScreen('patients')" id="nav-item-patient_registry" data-module="patient_registry">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Patient Registry
+        </a>
+        <a class="nav-item" onclick="switchScreen('inventory')" id="nav-item-pharmacy" data-module="pharmacy">
+          <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>
+          Pharmacy &amp; Stock
+        </a>
+        <a class="nav-item" onclick="switchScreen('reports')" id="nav-item-financial_reports" data-module="financial_reports">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Financial Reports
+        </a>
+      </nav>
+
+      <!-- Cloud Sync Settings Button -->
+      <button class="theme-toggle-btn" onclick="openSyncSettingsModal()" style="border-color: rgba(14, 165, 233, 0.4); margin-bottom: 8px;">
+        <svg style="width:16px;height:16px;stroke:var(--primary);" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+        Cloud Sync Settings
+      </button>
+
+      <button class="theme-toggle-btn" onclick="toggleTheme()">
+        <svg style="width:16px;height:16px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        Toggle Theme
+      </button>
+
+      <button class="logout-btn" onclick="handleLogout()">
+        <svg style="width:16px;height:16px;stroke:currentColor;fill:none;" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Log Out
+      </button>
+    </aside>
+
+    <!-- MAIN VIEWPORT -->
+    <main class="main-content">
+      
+      <!-- TOP HEADER BAR -->
+      <header class="header-bar">
+        <div>
+          <h1 class="page-title" id="screenTitle">Dashboard</h1>
+          <div class="header-greeting-sub" id="headerGreetingText">Welcome</div>
+        </div>
+        
+        <div style="display: flex; gap: 14px; align-items: center;">
+          <!-- Sync Simulator Toggle -->
+          <div class="toggle-switch-container">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Online Simulation:</span>
+            <label class="switch">
+              <input type="checkbox" id="syncSimToggle" checked onchange="handleSyncSimToggle(this)">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <!-- Sync Indicator Status (Click opens settings modal) -->
+          <div class="sync-status-indicator" onclick="openSyncSettingsModal()" title="Click to view Cloud Sync Settings & Details">
+            <span class="status-dot idle" id="syncStatusDot"></span>
+            <span id="syncStatusText">ONLINE</span>
+            <span id="lastSyncedTime" style="font-size: 10px; color: var(--text-muted);">Synced: Just now</span>
+          </div>
+
+          <!-- Quick Force Sync Button -->
+          <button class="btn btn-secondary btn-xs" onclick="triggerManualSync()" title="Force immediate Pull and Push cycle">
+            <svg style="width:12px;height:12px;stroke:currentColor;fill:none;" viewBox="0 0 24 24"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Sync Now
+          </button>
+        </div>
+      </header>
+
+      <!-- SCROLLABLE SCREEN CONTENTS -->
+      <div class="screens-viewport">
+
+        <!-- SCREEN: DASHBOARD -->
+        <section id="screen-dashboard" class="screen active">
+          
+          <!-- Financial metrics (visible to Doctor/Owner role) -->
+          <div class="card" id="profitWidget" style="display: none;">
+            <div class="card-title">
+              Financial Summary (LKR)
+              <div class="filter-bar" style="margin-bottom: 0;">
+                <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                  <label for="dashStartDate" style="white-space: nowrap;">From</label>
+                  <input type="date" id="dashStartDate" onchange="loadDashboardAnalytics()" style="padding: 4px 8px; font-size: 12px;">
+                </div>
+                <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                  <label for="dashEndDate" style="white-space: nowrap;">To</label>
+                  <input type="date" id="dashEndDate" onchange="loadDashboardAnalytics()" style="padding: 4px 8px; font-size: 12px;">
+                </div>
+              </div>
+            </div>
+            
+            <div class="dashboard-grid">
+              <div class="analytic-card">
+                <span class="analytic-label">Total Revenue</span>
+                <span class="analytic-value" id="dashTotalRevenue">Rs. 0.00</span>
+              </div>
+              <div class="analytic-card">
+                <span class="analytic-label">Net Profit Margin</span>
+                <span class="analytic-value profit" id="dashTotalProfit">Rs. 0.00</span>
+                <div class="analytic-split">
+                  <span>Meds: <strong id="dashMedProfit">Rs. 0</strong></span>
+                  <span>Fees: <strong id="dashFeeProfit">Rs. 0</strong></span>
+                </div>
+              </div>
+              <div class="analytic-card">
+                <span class="analytic-label">Patients Seen</span>
+                <span class="analytic-value" id="dashPatientsSeen">0</span>
+              </div>
+              <div class="analytic-card">
+                <span class="analytic-label">Waiting in Queue</span>
+                <span class="analytic-value" style="color: var(--primary);" id="dashRemainingQueue">0</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="split-row">
+            
+            <!-- Reusable Waiting Room Queue (all roles can view) -->
+            <div class="split-col-7">
+              <div class="card" style="height: 100%; display: flex; flex-direction: column;">
+                <div class="card-title">
+                  <span>Live Waiting Room Queue</span>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary btn-xs" onclick="switchScreen('appointments')">View All Appointments</button>
+                    <button class="btn btn-secondary btn-xs" onclick="refreshQueueUI()">Refresh</button>
+                  </div>
+                </div>
+                
+                <!-- Active Queue Component (Reusable list) -->
+                <div id="liveQueueComponent" class="queue-container">
+                  <div style="color: var(--text-muted); text-align: center; padding: 20px;">No patients currently in queue.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Add to Queue Widget -->
+            <div class="split-col-5">
+              <div class="card" id="quickQueueWidget" style="display: flex; flex-direction: column; gap: 16px;">
+                <div class="card-title">Add Patient to Live Queue</div>
+                <div class="form-group">
+                  <label for="queueSearchSelect">Select Patient</label>
+                  <select id="queueSearchSelect" style="width: 100%;">
+                    <!-- Populated via renderer.js -->
+                  </select>
+                </div>
+                <button class="btn" onclick="addSelectedToQueue()">Add to Waiting List</button>
+              </div>
+
+              <!-- Quick Cloud Sync Banner -->
+              <div class="card" style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 12px; opacity: 0.95;">
+                <svg viewBox="0 0 24 24" style="width: 44px; height: 44px; stroke: var(--primary); fill: none; stroke-width: 1.5;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <div style="font-weight: 700; font-size: 15px;">Offline-First Sync Engine (v1)</div>
+                <div style="font-size: 12px; color: var(--text-secondary); max-width: 250px;" id="dashClinicSubdomainText">Connected to Cloudflare Workers API for 2-way patient & appointment synchronization.</div>
+                <button class="btn btn-secondary btn-xs" onclick="openSyncSettingsModal()">Configure Sync API Key</button>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- SCREEN: APPOINTMENTS SCHEDULE (v1 Resource) -->
+        <section id="screen-appointments" class="screen">
+          <div class="card">
+            <div class="card-title">
+              <span>Clinic Appointments & Queue Schedule</span>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-success btn-xs" onclick="openDeskAppointmentModal()">+ Book Desk Walk-in</button>
+                <button class="btn btn-secondary btn-xs" onclick="loadAppointmentsList()">Refresh</button>
+              </div>
+            </div>
+
+            <!-- Filter and Date Bar -->
+            <div class="filter-bar">
+              <div class="form-group" style="flex: 1;">
+                <label for="apptDateFilter">Select Date</label>
+                <input type="date" id="apptDateFilter" onchange="loadAppointmentsList()">
+              </div>
+              <div class="form-group" style="flex: 2;">
+                <label for="apptSearchInput">Search Appointments</label>
+                <input type="text" id="apptSearchInput" placeholder="Filter by patient name, phone, or reference..." oninput="filterAppointmentsTable()">
+              </div>
+            </div>
+
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 70px;">Queue #</th>
+                    <th>Reference</th>
+                    <th>Patient Name</th>
+                    <th>Phone / NIC</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="appointmentsTableBody">
+                  <!-- Populated via renderer.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- SCREEN: PATIENTS REGISTRY -->
+        <section id="screen-patients" class="screen">
+          <div class="card">
+            <div class="card-title">
+              <span>Registered Patients</span>
+              <button class="btn btn-success btn-xs" onclick="openNewPatientModal()">+ Register Patient</button>
+            </div>
+            
+            <div class="search-container">
+              <div class="search-input-wrapper">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="patientSearchInput" placeholder="Search by name, ID, NIC, or phone..." oninput="filterPatientsList()">
+              </div>
+            </div>
+
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Patient ID / UID</th>
+                    <th>Name</th>
+                    <th>Age / Gender</th>
+                    <th>Phone</th>
+                    <th>NIC / DOB</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="patientsTableBody">
+                  <!-- Populated via renderer.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- SCREEN: CONSULTATIONS MODULE -->
+        <section id="screen-consultations" class="screen">
+          <div class="split-row">
+            <!-- Left: Waiting Patients Queue for Consultation -->
+            <div class="split-col-5">
+              <div class="card" style="height: 100%; display: flex; flex-direction: column;">
+                <div class="card-title">
+                  <span>Waiting Patients for Consultation</span>
+                  <button class="btn btn-secondary btn-xs" onclick="refreshConsultationsQueue()">Refresh</button>
+                </div>
+                <div id="consultationWaitingQueue" class="queue-container" style="flex: 1;">
+                  <!-- Injected via renderer.js -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Today's Consultation History & Fast Lookup -->
+            <div class="split-col-7">
+              <div class="card" style="height: 100%; display: flex; flex-direction: column;">
+                <div class="card-title">
+                  <span>Consultations Log</span>
+                  <div class="form-group" style="margin-bottom: 0; flex-direction: row; align-items: center; gap: 8px;">
+                    <label for="consultationDateFilter" style="white-space: nowrap; font-size: 12px;">Date:</label>
+                    <input type="date" id="consultationDateFilter" onchange="loadConsultationsLog()" style="padding: 4px 8px; font-size: 12px;">
+                  </div>
+                </div>
+
+                <div class="table-container" style="flex: 1;">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Patient Name</th>
+                        <th>Diagnosis</th>
+                        <th>Doctor</th>
+                        <th>Fee (Rs.)</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="consultationsLogTableBody">
+                      <!-- Injected via renderer.js -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SCREEN: ACCESS DENIED -->
+        <section id="screen-access-denied" class="screen">
+          <div class="card" style="text-align: center; padding: 60px 20px; max-width: 550px; margin: 40px auto;">
+            <div style="font-size: 54px; margin-bottom: 16px;">🛡️</div>
+            <h2 style="font-size: 22px; font-weight: 800; color: #f43f5e; margin-bottom: 12px;">Access Denied</h2>
+            <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px;" id="accessDeniedMsg">
+              You do not have permission to access this module. Please contact your system administrator to assign module permissions.
+            </p>
+            <button class="btn" onclick="switchScreen('dashboard')">Return to Dashboard</button>
+          </div>
+        </section>
+
+        <!-- SCREEN: PATIENT PROFILE VIEW (DETAILS / HISTORY / PRESCRIPTION TABS) -->
+        <section id="screen-patient-profile" class="screen">
+          
+          <!-- Top Patient Header Card -->
+          <div class="card patient-top-bar" style="margin-bottom: 16px; padding: 16px 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 14px;">
+                <button class="btn btn-secondary btn-xs" onclick="switchScreen('patients')">&larr; Back to Registry</button>
+                <div>
+                  <h2 style="font-size: 20px; font-weight: 800; display: inline-block; margin-right: 10px;" id="profName">...</h2>
+                  <span class="patient-id-badge" id="profId">SL-PT-XXXX</span>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-xs" onclick="addCurrentPatientToQueue()">+ Add to Live Queue</button>
+                <button class="btn btn-secondary btn-xs" onclick="openDeskAppointmentModalForCurrent()">Book Walk-in</button>
+                <button class="btn btn-secondary btn-xs" onclick="openEditPatientModal()">Edit Profile</button>
+              </div>
+            </div>
+
+            <!-- Patient Profile Tab Navigation -->
+            <div class="patient-tabs-bar" style="margin-top: 16px; display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+              <button type="button" class="tab-btn active" id="tabBtnDetails" onclick="switchPatientTab('details')">
+                👤 Patient Details
+              </button>
+              <button type="button" class="tab-btn" id="tabBtnHistory" onclick="switchPatientTab('history')">
+                📋 Medical History
+              </button>
+              <button type="button" class="tab-btn" id="tabBtnPrescription" onclick="switchPatientTab('prescription')">
+                💊 Prescription &amp; Treatment
+              </button>
+            </div>
+          </div>
+
+          <!-- TAB PANE 1: DETAILS -->
+          <div id="patientPaneDetails" class="patient-tab-pane active">
+            <div class="split-row">
+              <div class="split-col-7">
+                <div class="card patient-profile-details">
+                  <div class="card-title">Patient Profile Record</div>
+                  
+                  <div class="patient-header-grid">
+                    <div class="patient-info-field">
+                      <span class="patient-info-label">Patient ID</span>
+                      <span class="patient-info-value" id="profDetailsId">SL-PT-XXXX</span>
+                    </div>
+                    <div class="patient-info-field">
+                      <span class="patient-info-label">Full Name</span>
+                      <span class="patient-info-value" id="profDetailsName">...</span>
+                    </div>
+                    <div class="patient-info-field">
+                      <span class="patient-info-label">Date of Birth</span>
+                      <span class="patient-info-value" id="profDob">-</span>
+                    </div>
+                    <div class="patient-info-field">
+                      <span class="patient-info-label">Age / Gender</span>
+                      <span class="patient-info-value" id="profAgeGender">...</span>
+                    </div>
+                    <div class="patient-info-field">
+                      <span class="patient-info-label">Contact Number</span>
+                      <span class="patient-info-value" id="profPhone">...</span>
+                    </div>
+                    <div class="patient-info-field">
+                      <span class="patient-info-label">NIC / National ID</span>
+                      <span class="patient-info-value" id="profNic">-</span>
+                    </div>
+                    <div class="patient-info-field" style="grid-column: 1 / -1;">
+                      <span class="patient-info-label">Residential Address</span>
+                      <span class="patient-info-value" id="profAddress">...</span>
+                    </div>
+                    <div class="patient-info-field" style="grid-column: 1 / -1;">
+                      <span class="patient-info-label">Clinical History &amp; Known Allergies</span>
+                      <span class="patient-info-value" id="profHistory" style="white-space: pre-wrap;">...</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Attached Files Gallery -->
+              <div class="split-col-5">
+                <div class="card" style="height: 100%; display: flex; flex-direction: column;">
+                  <div class="card-title">
+                    <span>Attached Reports &amp; Images</span>
+                    <div style="display: flex; gap: 6px;">
+                      <button class="btn btn-secondary btn-xs" onclick="openMobileCaptureModal()">📸 Mobile / QR</button>
+                      <button class="btn btn-secondary btn-xs" onclick="handleAttachFile()">+ Attach File</button>
+                    </div>
+                  </div>
+                  <div class="files-grid" id="profFilesGrid" style="flex: 1;">
+                    <!-- Injected via renderer.js -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB PANE 2: MEDICAL HISTORY -->
+          <div id="patientPaneHistory" class="patient-tab-pane" style="display: none;">
+            <div class="card">
+              <div class="card-title">
+                <span>Previous Consultations &amp; Clinical Records</span>
+                <span style="font-size: 12px; color: var(--text-muted);">Chronological Patient History</span>
+              </div>
+
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 140px;">Date &amp; Time</th>
+                      <th>Consultation / Symptoms</th>
+                      <th>Diagnosis</th>
+                      <th>Prescribed Medicines</th>
+                      <th>Doctor</th>
+                      <th>Doctor Fee</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="patientHistoryTableBody">
+                    <!-- Populated via renderer.js -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB PANE 3: PRESCRIPTION & TREATMENT -->
+          <div id="patientPanePrescription" class="patient-tab-pane" style="display: none;">
+            <div class="split-row">
+              
+              <!-- Left: Interactive Prescription Writer -->
+              <div class="split-col-7">
+                <div class="card">
+                  <div class="card-title">
+                    <span>Write Prescription &amp; Clinical Record</span>
+                    <div style="display: flex; gap: 8px;">
+                      <button type="button" class="btn btn-primary btn-xs" onclick="openMedicationSearchModal()">🔍 Search Medication</button>
+                      <button type="button" class="btn btn-success btn-xs" onclick="openCustomMedicationModal()">➕ Add Custom Medication</button>
+                    </div>
+                  </div>
+
+                  <form id="activePrescriptionForm" onsubmit="savePatientActivePrescription(event)">
+                    
+                    <div class="form-row">
+                      <div class="form-group" style="flex: 1;">
+                        <label for="rxConsultSymptoms">Symptoms / Chief Complaint</label>
+                        <input type="text" id="rxConsultSymptoms" placeholder="e.g. High fever, dry cough, throat irritation">
+                      </div>
+                      <div class="form-group" style="flex: 1;">
+                        <label for="rxConsultDiagnosis">Diagnosis</label>
+                        <input type="text" id="rxConsultDiagnosis" placeholder="e.g. Acute Upper Respiratory Tract Infection">
+                      </div>
+                    </div>
+
+                    <!-- Prescribed Medication Items Table -->
+                    <div style="margin-top: 12px; margin-bottom: 16px;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 700; font-size: 13px;">Prescribed Medications:</span>
+                        <span style="font-size: 11px; color: var(--text-secondary);">* Stock is updated upon dispensing. Adding here will NOT deduct stock.</span>
+                      </div>
+
+                      <div id="rxPrescribedItemsList" class="prescribed-items-box">
+                        <div style="color: var(--text-muted); text-align: center; padding: 24px;" id="rxEmptyItemsPrompt">
+                          No medications added yet. Click <strong>Search Medication</strong> or <strong>Add Custom Medication</strong>.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="form-row">
+                      <div class="form-group" style="flex: 1;">
+                        <label for="rxDoctorFee">Doctor Consultation Fee (LKR)</label>
+                        <input type="number" id="rxDoctorFee" value="500" min="0" step="50">
+                      </div>
+                      <div class="form-group" style="flex: 2;">
+                        <label for="rxGeneralNotes">Special Instructions / General Notes</label>
+                        <input type="text" id="rxGeneralNotes" placeholder="e.g. Review in 5 days if fever persists. Drink plenty of fluids.">
+                      </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+                      <button type="button" class="btn btn-secondary" onclick="resetActivePrescriptionForm()">Clear Form</button>
+                      <button type="submit" class="btn btn-success" style="font-weight: 700; padding: 10px 24px;">
+                        ✓ Save &amp; Submit Prescription
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <!-- Right: Patient Prescriptions Timeline -->
+              <div class="split-col-5">
+                <div class="card" style="height: 100%; display: flex; flex-direction: column;">
+                  <div class="card-title">
+                    <span>Prescription Records</span>
+                    <span style="font-size: 12px; color: var(--text-muted);">Current &amp; Past</span>
+                  </div>
+                  <div class="prescription-timeline" id="profPrescriptionHistory" style="flex: 1; max-height: 600px; overflow-y: auto;">
+                    <!-- Injected via renderer.js -->
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </section>
+
+        <!-- SCREEN: PHARMACY & INVENTORY -->
+        <section id="screen-inventory" class="screen">
+          <div class="split-row">
+            
+            <div class="split-col-7">
+              <div class="card">
+                <div class="card-title">
+                  <span>Medicine Inventory & Pricing</span>
+                  <button class="btn btn-success btn-xs" onclick="openNewInventoryModal()">+ Add New Drug</button>
+                </div>
+
+                <div class="search-container">
+                  <div class="search-input-wrapper">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" id="inventorySearchInput" placeholder="Search drug..." oninput="filterInventoryList()">
+                  </div>
+                </div>
+
+                <div class="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Drug Name</th>
+                        <th>Qty in Stock</th>
+                        <th>Cost Price</th>
+                        <th>Selling Price</th>
+                        <th>Profit Margin</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="inventoryTableBody">
+                      <!-- Populated via renderer.js -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dispensing Wizard (Pharmacist / Nurse / Doctor) -->
+            <div class="split-col-5">
+              <div class="card" style="display: flex; flex-direction: column; gap: 16px;">
+                <div class="card-title">Dispense Prescription</div>
+                <div class="form-group">
+                  <label for="dispenseSearchSelect">Select Pending Prescribed Patient</label>
+                  <select id="dispenseSearchSelect" onchange="loadPatientPrescriptionForDispensing(this.value)" style="width: 100%;">
+                    <option value="">-- Select Patient --</option>
+                  </select>
+                </div>
+
+                <div id="dispensingWorkArea" style="display: none; flex-direction: column; gap: 16px;">
+                  <div class="prescription-card">
+                    <div class="prescription-meta">
+                      <span>Prescribed Items</span>
+                      <span id="dispenseRxDate">Date: --/--/----</span>
+                    </div>
+                    <div id="dispensingItemsContainer" style="display: flex; flex-direction: column; gap: 12px;">
+                      <!-- Form elements for each medicine item with quantities to dispense -->
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="dispenseDoctorFee">Doctor Consultation Fee (LKR)</label>
+                    <input type="number" id="dispenseDoctorFee" value="500" min="0" step="50">
+                  </div>
+
+                  <div class="card" style="background: rgba(16, 185, 129, 0.05); padding: 12px; border-color: rgba(16, 185, 129, 0.2);">
+                    <div style="display: flex; justify-content: space-between; font-weight: 700;">
+                      <span>Total Charge:</span>
+                      <span id="dispenseTotalPrice">Rs. 0.00</span>
+                    </div>
+                  </div>
+
+                  <button class="btn btn-success" onclick="submitDispenseTransaction()">Confirm Dispensation & Sale</button>
+                </div>
+
+                <div id="noPendingRxMessage" style="color: var(--text-muted); text-align: center; padding: 20px;">
+                  Select a patient to view and dispense their active prescriptions.
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- SCREEN: FINANCIAL REPORTS -->
+        <section id="screen-reports" class="screen">
+          <div class="card">
+            <div class="card-title">
+              Financial Summary & Sales Register
+              <div class="filter-bar" style="margin-bottom: 0;">
+                <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                  <label for="repStartDate" style="white-space: nowrap;">From</label>
+                  <input type="date" id="repStartDate" onchange="loadFinancialReports()" style="padding: 4px 8px; font-size: 12px;">
+                </div>
+                <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                  <label for="repEndDate" style="white-space: nowrap;">To</label>
+                  <input type="date" id="repEndDate" onchange="loadFinancialReports()" style="padding: 4px 8px; font-size: 12px;">
+                </div>
+              </div>
+            </div>
+
+            <div class="dashboard-grid">
+              <div class="analytic-card">
+                <span class="analytic-label">Medicine Sales Revenue</span>
+                <span class="analytic-value" id="repMedRevenue">Rs. 0.00</span>
+              </div>
+              <div class="analytic-card">
+                <span class="analytic-label">Medicine Net Profit</span>
+                <span class="analytic-value profit" id="repMedProfit">Rs. 0.00</span>
+              </div>
+              <div class="analytic-card">
+                <span class="analytic-label">Doctor Fee Revenue</span>
+                <span class="analytic-value" id="repFeeRevenue">Rs. 0.00</span>
+              </div>
+              <div class="analytic-card">
+                <span class="analytic-label">Total Net Clinic Profit</span>
+                <span class="analytic-value profit" id="repTotalProfit">Rs. 0.00</span>
+              </div>
+            </div>
+
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date & Time</th>
+                    <th>Type</th>
+                    <th>Item / Description</th>
+                    <th>Patient</th>
+                    <th>Quantity</th>
+                    <th>Amount (Rs.)</th>
+                    <th>Profit (Rs.)</th>
+                  </tr>
+                </thead>
+                <tbody id="salesRegisterTableBody">
+                  <!-- Populated via renderer.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ==========================================
+       MODALS
+       ========================================== -->
+
+  <!-- MODAL: CLOUD SYNC SETTINGS & API CREDENTIALS (v1) -->
+  <div id="syncSettingsModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="logo-icon" style="width: 32px; height: 32px; font-size: 16px;">NP</div>
+          <h3 class="modal-title">Cloud Sync & API Settings</h3>
+        </div>
+        <button class="modal-close" onclick="closeModal('syncSettingsModal')">&times;</button>
+      </div>
+
+      <form id="syncSettingsForm" onsubmit="handleSaveSyncSettings(event)">
+        
+        <div class="form-group">
+          <label for="syncBaseUrl">Clinic Domain / Subdomain</label>
+          <input type="text" id="syncBaseUrl" required placeholder="minimtech.novopractise.com or https://minimtech.novopractise.com">
+          <span style="font-size: 11px; color: var(--text-muted);">The sync API base will be resolved automatically to <code>https://&lt;subdomain&gt;.novopractise.com/api/sync/v1</code></span>
+        </div>
+
+        <div class="form-group">
+          <label for="syncApiKey">Sync API Key (Bearer Token)</label>
+          <div class="password-input-wrapper">
+            <input type="password" id="syncApiKey" required placeholder="npk_XXXXXXXXXXXXXXXX.YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY">
+            <button type="button" class="password-toggle-btn" onclick="toggleApiKeyVisibility()" title="Show/Hide Key">
+              <svg id="apiKeyEyeIcon" style="width:16px;height:16px;stroke:currentColor;fill:none;" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <span style="font-size: 11px; color: var(--text-muted);">Generated from your clinic's Super-Admin console on <code>novopractise.com</code></span>
+        </div>
+
+        <!-- Handshake / Verification Banner -->
+        <div id="handshakeResultCard" class="clinic-profile-card" style="display: none;">
+          <div class="clinic-profile-header">
+            <span class="clinic-profile-name" id="cardClinicName">Clinic Name</span>
+            <span id="cardSyncStatusBadge" class="sync-badge-connected">Connected</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
+            <div>Subdomain: <strong id="cardSubdomain">-</strong></div>
+            <div>Timezone: <strong id="cardTimezone">Asia/Colombo</strong></div>
+            <div>Protocol Version: <strong id="cardProtocolVer">1</strong></div>
+            <div>Last Verified: <strong id="cardLastVerified">-</strong></div>
+          </div>
+          <div id="handshakeErrorMsg" style="color: #f43f5e; font-size: 12px; display: none;"></div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" onclick="testSyncConnection()" id="btnTestHandshake" style="flex: 1;">
+            <svg style="width:14px;height:14px;stroke:currentColor;fill:none;" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Test & Connect
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="triggerManualSync()" style="flex: 1;">
+            <svg style="width:14px;height:14px;stroke:currentColor;fill:none;" viewBox="0 0 24 24"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Sync Now
+          </button>
+          <button type="submit" class="btn" style="flex: 1;">Save Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: BOOK DESK WALK-IN APPOINTMENT (v1) -->
+  <div id="deskAppointmentModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Book Desk Walk-in Appointment</h3>
+        <button class="modal-close" onclick="closeModal('deskAppointmentModal')">&times;</button>
+      </div>
+      <form id="deskApptForm" onsubmit="handleCreateDeskAppointment(event)">
+        
+        <!-- Patient Mode Tabs -->
+        <div style="display: flex; gap: 8px; margin-bottom: 16px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 10px; border: 1px solid var(--border-color);">
+          <button type="button" id="tabExistingPatientBtn" class="btn btn-xs" style="flex: 1; background: var(--primary); color: white;" onclick="switchApptPatientMode('existing')">
+            👤 Existing Patient
+          </button>
+          <button type="button" id="tabNewPatientBtn" class="btn btn-xs btn-secondary" style="flex: 1;" onclick="switchApptPatientMode('new')">
+            ➕ Register New Patient
+          </button>
+        </div>
+
+        <input type="hidden" id="deskApptPatientMode" value="existing">
+
+        <!-- EXISTING PATIENT SELECTOR -->
+        <div id="deskApptExistingGroup" class="form-group">
+          <label for="deskApptPatientSelect">Select Patient</label>
+          <select id="deskApptPatientSelect" style="width: 100%;" onchange="handleApptPatientSelectChange(this)">
+            <!-- Populated via renderer.js -->
+          </select>
+        </div>
+
+        <!-- NEW PATIENT AUTO-REGISTRATION FORM -->
+        <div id="deskApptNewGroup" style="display: none; background: rgba(14, 165, 233, 0.05); padding: 14px; border-radius: 10px; border: 1px solid rgba(14, 165, 233, 0.2); margin-bottom: 14px;">
+          <div style="font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">
+            ✨ Quick Patient Registration
+          </div>
+          
+          <div class="form-group">
+            <label for="deskNewPatName">Full Name *</label>
+            <input type="text" id="deskNewPatName" placeholder="Ex: Nimal Silva">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="deskNewPatPhone">Phone Number</label>
+              <input type="tel" id="deskNewPatPhone" placeholder="+94 77 123 4567">
+            </div>
+            <div class="form-group">
+              <label for="deskNewPatNic">NIC (National ID)</label>
+              <input type="text" id="deskNewPatNic" placeholder="199212345678">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="deskNewPatAge">Age</label>
+              <input type="number" id="deskNewPatAge" min="0" max="130" placeholder="Ex: 34">
+            </div>
+            <div class="form-group">
+              <label for="deskNewPatGender">Gender</label>
+              <select id="deskNewPatGender">
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- APPOINTMENT DETAILS -->
+        <div class="form-row">
+          <div class="form-group">
+            <label for="deskApptDate">Appointment Date</label>
+            <input type="date" id="deskApptDate" required>
+          </div>
+          <div class="form-group">
+            <label for="deskApptStatus">Status</label>
+            <select id="deskApptStatus">
+              <option value="booked" selected>Booked (Waiting)</option>
+              <option value="seen">Seen / Consulted</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="deskApptNotes">Notes / Reason for Visit</label>
+          <textarea id="deskApptNotes" rows="2" placeholder="Ex: Fever & cough, routine checkup, follow-up"></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-success" style="width: 100%; font-weight: 700; padding: 12px;">
+          Book Appointment & Assign Queue #
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CREATE / EDIT PATIENT -->
+  <div id="patientModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="patientModalTitle">Register New Patient</h3>
+        <button class="modal-close" onclick="closeModal('patientModal')">&times;</button>
+      </div>
+      <form id="patientForm" onsubmit="savePatient(event)">
+        <input type="hidden" id="editPatientId">
+        <div class="form-group">
+          <label for="patName">Full Name</label>
+          <input type="text" id="patName" required placeholder="Ex: Kasun Perera">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="patPhone">Phone Number</label>
+            <input type="tel" id="patPhone" placeholder="+94 77 123 4567">
+          </div>
+          <div class="form-group">
+            <label for="patNic">NIC (National ID)</label>
+            <input type="text" id="patNic" placeholder="199212345678">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="patAge">Age</label>
+            <input type="number" id="patAge" min="0" max="130" placeholder="Ex: 32">
+          </div>
+          <div class="form-group">
+            <label for="patGender">Gender</label>
+            <select id="patGender">
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="patDob">Date of Birth</label>
+          <input type="date" id="patDob">
+        </div>
+        <div class="form-group">
+          <label for="patAddress">Residential Address</label>
+          <input type="text" id="patAddress" placeholder="Colombo, Sri Lanka">
+        </div>
+        <div class="form-group">
+          <label for="patHistory">Medical History & Known Allergies</label>
+          <textarea id="patHistory" rows="3" placeholder="Ex: Allergic to penicillin. Diabetic."></textarea>
+        </div>
+        <button type="submit" class="btn" style="width: 100%;">Save Patient Record</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: WRITE PRESCRIPTION -->
+  <div id="prescriptionModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Write New Prescription</h3>
+        <button class="modal-close" onclick="closeModal('prescriptionModal')">&times;</button>
+      </div>
+      <form id="prescriptionForm" onsubmit="savePrescription(event)">
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
+          <div style="font-weight: 600; font-size: 13px;">Prescribed Drugs & Dosages:</div>
+          <div id="rxItemsContainer" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Rows injected via renderer.js -->
+          </div>
+          <button type="button" class="btn btn-secondary btn-xs" onclick="addRxItemRow()">+ Add Medicine</button>
+        </div>
+        <button type="submit" class="btn btn-success" style="width: 100%;">Submit Prescription to Pharmacy</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CREATE / EDIT INVENTORY DRUG -->
+  <div id="inventoryModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="inventoryModalTitle">Add Medicine to Stock</h3>
+        <button class="modal-close" onclick="closeModal('inventoryModal')">&times;</button>
+      </div>
+      <form id="inventoryForm" onsubmit="saveInventoryItem(event)">
+        <input type="hidden" id="editInventoryId">
+        <div class="form-group">
+          <label for="invName">Drug Name & Strength</label>
+          <input type="text" id="invName" required placeholder="Ex: Paracetamol 500mg">
+        </div>
+        <div class="form-group">
+          <label for="invQuantity">Stock Quantity</label>
+          <input type="number" id="invQuantity" required min="0" placeholder="Ex: 500">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="invCostPrice">Cost Price per unit (Rs.)</label>
+            <input type="number" id="invCostPrice" required min="0" step="0.01" placeholder="Ex: 1.50">
+          </div>
+          <div class="form-group">
+            <label for="invSellingPrice">Selling Price per unit (Rs.)</label>
+            <input type="number" id="invSellingPrice" required min="0" step="0.01" placeholder="Ex: 3.50">
+          </div>
+        </div>
+        <button type="submit" class="btn" style="width: 100%;">Save Drug Item</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: VIEW ATTACHMENT FILE -->
+  <div id="fileViewerModal" class="modal-overlay" onclick="closeModal('fileViewerModal')">
+    <div class="modal-content" style="max-width: 80vw; text-align: center;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 class="modal-title" id="fileViewerTitle">Attachment File</h3>
+        <button class="modal-close" onclick="closeModal('fileViewerModal')">&times;</button>
+      </div>
+      <div id="fileViewerBody" style="max-height: 70vh; overflow: auto; display: flex; justify-content: center; align-items: center;">
+        <!-- Injected image or iframe for PDF -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: MOBILE CAMERA & QR SCANNING LINK -->
+  <div id="mobileCaptureModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Mobile Camera Sync & Desktop Webcam</h3>
+        <button class="modal-close" onclick="closeMobileCaptureModal()">&times;</button>
+      </div>
+      <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+        <!-- Option 1: Mobile Phone QR code -->
+        <div style="flex: 1.2; min-width: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; border-right: 1px solid var(--border-color); padding-right: 16px; box-sizing: border-box;">
+          <div style="font-weight: 700; margin-bottom: 6px; font-size: 14px; color: var(--primary);">Option 1: Snap via Mobile Phone</div>
+          
+          <div style="display: flex; gap: 8px; margin-bottom: 10px; width: 100%;">
+            <button id="qrTabWifiBtn" class="btn btn-xs" style="flex: 1; background: var(--primary); color: white;" onclick="switchQrTab('wifi')">📶 Local Wi-Fi</button>
+            <button id="qrTabCloudBtn" class="btn btn-xs btn-secondary" style="flex: 1;" onclick="switchQrTab('cloud')">🌐 Cloud / 4G Link</button>
+          </div>
+
+          <!-- Local Wi-Fi View -->
+          <div id="qrTabWifiContainer" style="display: flex; flex-direction: column; align-items: center;">
+            <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">Scan with phone on local clinic Wi-Fi.</p>
+            <div style="background: white; padding: 10px; border-radius: 12px; margin-bottom: 8px;">
+              <img id="mobileSyncQrImage" src="" alt="Local Wi-Fi QR Code" style="width: 150px; height: 150px; display: block; object-fit: contain;">
+            </div>
+            <div style="font-size: 10px; color: var(--text-muted); word-break: break-all; max-width: 220px;" id="mobileSyncUrlText">http://localhost:3000/mobile</div>
+          </div>
+
+          <!-- Cloud Tunnel View -->
+          <div id="qrTabCloudContainer" style="display: none; flex-direction: column; align-items: center;">
+            <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">Scan with ANY phone (Works on 4G/5G/Mobile Data).</p>
+            <div style="background: white; padding: 10px; border-radius: 12px; margin-bottom: 8px;">
+              <img id="mobileSyncCloudQrImage" src="" alt="Cloud Tunnel QR Code" style="width: 150px; height: 150px; display: block; object-fit: contain;">
+            </div>
+            <div style="font-size: 10px; color: var(--text-muted); word-break: break-all; max-width: 220px;" id="mobileSyncCloudUrlText">https://gold-ads-cry.loca.lt/mobile</div>
+          </div>
+        </div>
+
+        <!-- Option 2: Desktop Webcam -->
+        <div style="flex: 1; min-width: 250px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box;">
+          <div style="font-weight: 700; margin-bottom: 8px; font-size: 14px; color: var(--primary);">Option 2: Desktop Web Camera</div>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">Snap a picture using the computer's built-in web camera.</p>
+          
+          <video id="desktopWebcamVideo" style="width: 100%; border-radius: 12px; aspect-ratio: 4/3; background: black; border: 1px solid var(--border-color);" autoplay playsinline></video>
+          <canvas id="desktopWebcamCanvas" style="display: none;"></canvas>
+          
+          <div style="display: flex; gap: 8px; width: 100%; margin-top: 12px;">
+            <button class="btn btn-secondary btn-xs" style="flex: 1;" onclick="toggleDesktopWebcam()">Start/Stop Cam</button>
+            <button class="btn btn-success btn-xs" style="flex: 1;" onclick="captureDesktopWebcamPhoto()">Capture & Attach</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: FORGOT PASSWORD -->
+  <div id="forgotPasswordModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Account Password Recovery</h3>
+        <button class="modal-close" onclick="closeModal('forgotPasswordModal')">&times;</button>
+      </div>
+      <div style="padding: 10px 0;">
+        <div style="text-align: center; margin-bottom: 16px;">
+          <div style="font-size: 40px; margin-bottom: 8px;">🔐</div>
+          <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+            To reset or recover credentials for Doctor or Receptionist accounts, please contact your Clinic System Administrator or run the security reconfiguration utility.
+          </p>
+        </div>
+        
+        <div class="system-status-box" style="margin-bottom: 16px;">
+          <div class="status-row">
+            <span>Security Policy:</span>
+            <strong>Encrypted Database Storage</strong>
+          </div>
+          <div class="status-row">
+            <span>Admin Contact:</span>
+            <span>support@novopractise.com</span>
+          </div>
+          <div class="status-row">
+            <span>Terminal:</span>
+            <code>Local Clinic Server #1</code>
+          </div>
+        </div>
+
+        <button type="button" class="btn" style="width: 100%;" onclick="closeModal('forgotPasswordModal')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD CUSTOM MEDICATION (Not in pharmacy stock) -->
+  <div id="customMedicationModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 560px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="account-role-badge doctor" style="background: rgba(14, 165, 233, 0.15); color: var(--primary);">CUSTOM</span>
+          <h3 class="modal-title">Add Custom Medication</h3>
+        </div>
+        <button class="modal-close" onclick="closeModal('customMedicationModal')">&times;</button>
+      </div>
+      <form id="customMedicationForm" onsubmit="handleCustomMedicationSubmit(event)">
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+          Enter custom medication details not currently registered in the Pharmacy database. This will be marked as custom and will <strong>not</strong> deduct from pharmacy inventory.
+        </p>
+
+        <div class="form-group">
+          <label for="customMedName">Medicine Name &amp; Generic Name *</label>
+          <input type="text" id="customMedName" required placeholder="e.g. Augmentin 625mg / Co-Amoxiclav">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="customMedDosage">Dosage / Strength</label>
+            <input type="text" id="customMedDosage" placeholder="e.g. 625mg / 10ml / 2 puffs">
+          </div>
+          <div class="form-group">
+            <label for="customMedForm">Dosage Form</label>
+            <select id="customMedForm">
+              <option value="Tablet" selected>Tablet</option>
+              <option value="Capsule">Capsule</option>
+              <option value="Syrup">Syrup</option>
+              <option value="Suspension">Suspension</option>
+              <option value="Injection">Injection</option>
+              <option value="Inhaler">Inhaler</option>
+              <option value="Cream/Ointment">Cream/Ointment</option>
+              <option value="Drops">Drops</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="customMedFrequency">Frequency</label>
+            <select id="customMedFrequency">
+              <option value="Once Daily (OD)">Once Daily (OD)</option>
+              <option value="Twice Daily (BD)" selected>Twice Daily (BD)</option>
+              <option value="Thrice Daily (TDS)">Thrice Daily (TDS)</option>
+              <option value="Four Times Daily (QDS)">Four Times Daily (QDS)</option>
+              <option value="Every 4-6 Hours">Every 4-6 Hours</option>
+              <option value="At Bedtime (HS)">At Bedtime (HS)</option>
+              <option value="As Needed (PRN)">As Needed (PRN)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="customMedDuration">Duration</label>
+            <input type="text" id="customMedDuration" placeholder="e.g. 5 days / 1 week / 1 month" value="5 days">
+          </div>
+          <div class="form-group">
+            <label for="customMedQuantity">Quantity *</label>
+            <input type="number" id="customMedQuantity" required min="1" value="10" placeholder="Qty">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="customMedInstructions">Patient Instructions</label>
+          <input type="text" id="customMedInstructions" placeholder="e.g. Take with or after food. Complete the full course.">
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 18px;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('customMedicationModal')" style="flex: 1;">Cancel</button>
+          <button type="submit" class="btn btn-success" style="flex: 2; font-weight: 700;">+ Add to Prescription</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: SEARCH MEDICATION IN PHARMACY STOCK -->
+  <div id="medicationSearchModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 680px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <h3 class="modal-title">Search Pharmacy Medication</h3>
+        </div>
+        <button class="modal-close" onclick="closeModal('medicationSearchModal')">&times;</button>
+      </div>
+      
+      <!-- Search Input -->
+      <div class="search-container" style="margin-bottom: 14px;">
+        <div class="search-input-wrapper">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="pharmacyMedSearchInput" placeholder="Search by drug name, code (e.g. Paracetamol, MED-001)..." oninput="handleLiveMedicationSearch(this.value)">
+        </div>
+      </div>
+
+      <!-- Quick Results List -->
+      <div class="med-search-results-list" id="medSearchResultsContainer" style="max-height: 280px; overflow-y: auto; margin-bottom: 16px;">
+        <!-- Injected via renderer.js -->
+      </div>
+
+      <!-- Selected Drug Configuration Sub-Form -->
+      <div id="selectedDrugConfigArea" style="display: none; background: rgba(14, 165, 233, 0.05); padding: 14px; border-radius: 10px; border: 1px solid rgba(14, 165, 233, 0.2); margin-top: 12px;">
+        <div style="font-weight: 700; font-size: 14px; margin-bottom: 10px; color: var(--primary);" id="selectedDrugConfigName">
+          Selected Drug
+        </div>
+
+        <input type="hidden" id="configSelectedMedId">
+        <input type="hidden" id="configSelectedMedName">
+        <input type="hidden" id="configSelectedMedPrice">
+        <input type="hidden" id="configSelectedMedStock">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="configMedDosage">Dosage</label>
+            <input type="text" id="configMedDosage" placeholder="e.g. 500mg / 1 tab" value="1 tablet">
+          </div>
+          <div class="form-group">
+            <label for="configMedFrequency">Frequency</label>
+            <select id="configMedFrequency">
+              <option value="Once Daily (OD)">Once Daily (OD)</option>
+              <option value="Twice Daily (BD)">Twice Daily (BD)</option>
+              <option value="Thrice Daily (TDS)" selected>Thrice Daily (TDS)</option>
+              <option value="Four Times Daily (QDS)">Four Times Daily (QDS)</option>
+              <option value="Every 4-6 Hours">Every 4-6 Hours</option>
+              <option value="At Bedtime (HS)">At Bedtime (HS)</option>
+              <option value="As Needed (PRN)">As Needed (PRN)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="configMedDuration">Duration</label>
+            <input type="text" id="configMedDuration" placeholder="e.g. 3 days / 5 days" value="5 days">
+          </div>
+          <div class="form-group">
+            <label for="configMedQty">Quantity *</label>
+            <input type="number" id="configMedQty" min="1" value="15" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="configMedInstructions">Instructions</label>
+          <input type="text" id="configMedInstructions" placeholder="e.g. Take after food with water." value="Take after food">
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 12px;">
+          <button type="button" class="btn btn-secondary btn-xs" onclick="cancelSelectedDrugConfig()">Cancel</button>
+          <button type="button" class="btn btn-success btn-xs" onclick="confirmAddSelectedDrugToPrescription()">+ Add to Prescription</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: VIEW CONSULTATION DETAILS -->
+  <div id="consultationDetailModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Consultation Details</h3>
+        <button class="modal-close" onclick="closeModal('consultationDetailModal')">&times;</button>
+      </div>
+      <div id="consultationDetailBody" style="padding: 10px 0;">
+        <!-- Injected via renderer.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- CORE RENDERER LOGIC -->
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "novopractise-clinic",
+  "version": "1.0.0",
+  "description": "Offline-first clinic management application for Sri Lanka",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "rebuild": "electron-rebuild"
+  },
+  "keywords": [
+    "electron",
+    "sqlite",
+    "clinic"
+  ],
+  "author": "Antigravity",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^11.1.2",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "localtunnel": "^2.0.2",
+    "qrcode": "^1.5.3"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
+    "electron": "^31.0.0"
+  }
+}
