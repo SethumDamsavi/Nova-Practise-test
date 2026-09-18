@@ -107,7 +107,15 @@ function sendHttpRequest(method, urlString, payload = null, headers = {}) {
           if (res.statusCode >= 200 && res.statusCode < 300) {
             resolve({ statusCode: res.statusCode, data: parsed });
           } else {
-            const err = new Error(parsed.error || parsed.message || `HTTP ${res.statusCode}: ${res.statusMessage}`);
+            let errorText = `HTTP ${res.statusCode}: ${res.statusMessage}`;
+            if (typeof parsed.error === 'string') {
+              errorText = parsed.error;
+            } else if (parsed.error && typeof parsed.error.message === 'string') {
+              errorText = parsed.error.message;
+            } else if (typeof parsed.message === 'string') {
+              errorText = parsed.message;
+            }
+            const err = new Error(errorText);
             err.statusCode = res.statusCode;
             err.response = parsed;
             reject(err);

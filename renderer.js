@@ -11,6 +11,7 @@ let apiKeyVisible = false;
 
 // Setup Wizard State (5 Steps)
 let wizardCurrentStep = 1;
+let activeWizardUserIdx = 0;
 let allDatabaseRoles = [];
 let allSystemModules = [
   { id: 1, name: 'Dashboard', slug: 'dashboard' },
@@ -171,11 +172,42 @@ function goToWizardStep(step) {
   }
 }
 
-// STEP 2: USER CARDS & DYNAMIC ROLE RENDERING WITH INLINE MODULE ACCESS & FULL ADMIN?
+// Helper to escape HTML attributes safely
+function escapeHtmlAttr(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+const moduleCatalogMetadata = {
+  dashboard: { icon: '📊', desc: 'Real-time metrics, queue flow & system analytics' },
+  appointments: { icon: '📅', desc: 'Patient booking, scheduling & calendar management' },
+  consultations: { icon: '🩺', desc: 'Clinical visit records, notes & electronic prescriptions' },
+  patient_registry: { icon: '👥', desc: 'Demographics, medical history & patient dossiers' },
+  pharmacy: { icon: '💊', desc: 'Inventory tracking, stock dispensing & low-stock alerts' },
+  financial_reports: { icon: '📈', desc: 'Revenue analytics, daily earnings & sales summaries' }
+};
+
+function selectWizardUserTab(idx) {
+  if (idx >= 0 && idx < wizardUsers.length) {
+    activeWizardUserIdx = idx;
+    renderWizardUserCards();
+  }
+}
+
+// STEP 2: USER CARDS & DYNAMIC ROLE RENDERING (MODERN TABBED 2-COLUMN COMMAND CENTER)
 function renderWizardUserCards() {
   const container = document.getElementById('wizardUserAccountsContainer');
   if (!container) return;
   container.innerHTML = '';
+
+  if (activeWizardUserIdx >= wizardUsers.length) {
+    activeWizardUserIdx = Math.max(0, wizardUsers.length - 1);
+  }
 
   const roles = allDatabaseRoles.length > 0 ? allDatabaseRoles : [
     { name: 'Doctor', slug: 'doctor' },
@@ -183,103 +215,191 @@ function renderWizardUserCards() {
     { name: 'Pharmacist', slug: 'pharmacist' }
   ];
 
+  // 1. Top Navigation Tab Bar
+  const tabNav = document.createElement('div');
+  tabNav.className = 'wizard-user-tabs';
+
   wizardUsers.forEach((u, idx) => {
-    const card = document.createElement('div');
-    card.className = 'account-card';
-    card.id = `wizUserCard-${idx}`;
-
-    let roleOptionsHtml = '';
-    roles.forEach(r => {
-      const selected = (u.role_slug === r.slug || u.role_slug === r.name.toLowerCase()) ? 'selected' : '';
-      roleOptionsHtml += `<option value="${r.slug}" ${selected}>${r.name}</option>`;
-    });
-
+    const isActive = idx === activeWizardUserIdx;
     const roleBadgeClass = u.role_slug === 'doctor' ? 'doctor' : (u.role_slug === 'pharmacist' ? 'pharmacist' : 'receptionist');
+    const roleIcon = u.role_slug === 'doctor' ? '🩺' : (u.role_slug === 'pharmacist' ? '💊' : '📋');
+    const displayName = u.full_name || u.username || `User #${idx + 1}`;
 
-    // Ensure default module assignments
-    if (!wizardUserModules[u.username]) {
-      if (u.role_slug === 'doctor') {
-        wizardUserModules[u.username] = allSystemModules.map(m => m.slug);
-      } else if (u.role_slug === 'receptionist') {
-        wizardUserModules[u.username] = ['dashboard', 'appointments', 'patient_registry'];
-      } else if (u.role_slug === 'pharmacist') {
-        wizardUserModules[u.username] = ['dashboard', 'pharmacy'];
-      } else {
-        const foundRole = allDatabaseRoles.find(r => r.slug === u.role_slug);
-        try {
-          wizardUserModules[u.username] = foundRole && foundRole.default_modules ? JSON.parse(foundRole.default_modules) : ['dashboard'];
-        } catch (e) {
-          wizardUserModules[u.username] = ['dashboard'];
-        }
+    const pill = document.createElement('div');
+    pill.className = `user-tab-pill ${isActive ? 'active' : ''}`;
+    pill.id = `wizUserTabPill-${idx}`;
+    pill.onclick = () => selectWizardUserTab(idx);
+
+    pill.innerHTML = `
+      <span style="font-size: 14px;">${roleIcon}</span>
+      <span id="wizUserTabLabel-${idx}" style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtmlAttr(displayName)}</span>
+      <span class="account-role-badge ${roleBadgeClass}" id="wizUserTabBadge-${idx}" style="font-size: 10px; padding: 2px 6px;">${(u.role_slug || 'USER').toUpperCase()}</span>
+    `;
+    tabNav.appendChild(pill);
+  });
+
+  // "+ Add User" Pill
+  const addPill = document.createElement('div');
+  addPill.className = 'user-tab-add-btn';
+  addPill.innerHTML = `<span>+</span><span>Add User</span>`;
+  addPill.title = 'Add another user account';
+  addPill.onclick = () => addNewWizardUserCard();
+  tabNav.appendChild(addPill);
+
+  container.appendChild(tabNav);
+
+  // 2. Active User Command Center (2-Column Spacious Layout)
+  const activeUser = wizardUsers[activeWizardUserIdx];
+  if (!activeUser) return;
+  const idx = activeWizardUserIdx;
+
+  // Ensure default module assignments for active user
+  if (!wizardUserModules[activeUser.username]) {
+    if (activeUser.role_slug === 'doctor') {
+      wizardUserModules[activeUser.username] = allSystemModules.map(m => m.slug);
+    } else if (activeUser.role_slug === 'receptionist') {
+      wizardUserModules[activeUser.username] = ['dashboard', 'appointments', 'patient_registry'];
+    } else if (activeUser.role_slug === 'pharmacist') {
+      wizardUserModules[activeUser.username] = ['dashboard', 'pharmacy'];
+    } else {
+      const foundRole = allDatabaseRoles.find(r => r.slug === activeUser.role_slug);
+      try {
+        wizardUserModules[activeUser.username] = foundRole && foundRole.default_modules ? JSON.parse(foundRole.default_modules) : ['dashboard'];
+      } catch (e) {
+        wizardUserModules[activeUser.username] = ['dashboard'];
       }
     }
+  }
 
-    const assignedMods = wizardUserModules[u.username] || [];
-    const isFullAdmin = allSystemModules.length > 0 && assignedMods.length === allSystemModules.length;
+  const assignedMods = wizardUserModules[activeUser.username] || [];
+  const isFullAdmin = allSystemModules.length > 0 && assignedMods.length === allSystemModules.length;
+  const roleBadgeClass = activeUser.role_slug === 'doctor' ? 'doctor' : (activeUser.role_slug === 'pharmacist' ? 'pharmacist' : 'receptionist');
 
-    const modulesCheckboxesHtml = allSystemModules.map(mod => {
-      const isChecked = assignedMods.includes(mod.slug);
-      return `
-        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; background: var(--bg-card); padding: 6px 8px; border-radius: 6px; border: 1px solid ${isChecked ? 'rgba(14, 165, 233, 0.4)' : 'var(--border-color)'};">
-          <input type="checkbox" class="wiz-user-mod-${idx}" value="${mod.slug}" ${isChecked ? 'checked' : ''} onchange="handleWizardUserModuleToggle(${idx}, '${mod.slug}', this.checked)">
-          <span style="${isChecked ? 'color: var(--text-primary); font-weight: 600;' : 'color: var(--text-muted);'}">${mod.name}</span>
-        </label>
-      `;
-    }).join('');
+  let roleOptionsHtml = '';
+  roles.forEach(r => {
+    const selected = (activeUser.role_slug === r.slug || activeUser.role_slug === r.name.toLowerCase()) ? 'selected' : '';
+    roleOptionsHtml += `<option value="${r.slug}" ${selected}>${r.name}</option>`;
+  });
 
-    card.innerHTML = `
-      <div class="account-card-header">
-        <span class="account-role-badge ${roleBadgeClass}" id="wizUserBadge-${idx}">${(u.role_slug || 'USER').toUpperCase()}</span>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          ${wizardUsers.length > 1 ? `<button type="button" class="btn btn-danger btn-xs" onclick="removeWizardUserCard(${idx})" title="Remove user">&times; Remove</button>` : ''}
-        </div>
+  const editorGrid = document.createElement('div');
+  editorGrid.className = 'user-editor-grid';
+
+  // Left Column: Identity & Credentials
+  const leftCol = document.createElement('div');
+  leftCol.className = 'user-editor-pane';
+  leftCol.innerHTML = `
+    <div class="user-editor-pane-header">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="account-role-badge ${roleBadgeClass}" id="wizUserBadge-${idx}">${(activeUser.role_slug || 'USER').toUpperCase()}</span>
+        <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Account Credentials</span>
       </div>
-      <div class="form-group">
-        <label>Full Name *</label>
-        <input type="text" id="wizUserFullName-${idx}" placeholder="e.g. Dr. John Silva" value="${u.full_name}" oninput="updateWizardUserData(${idx}, 'full_name', this.value)" required>
+      ${wizardUsers.length > 1 ? `<button type="button" class="btn btn-danger btn-xs" onclick="removeWizardUserCard(${idx})" title="Remove this user">&times; Remove</button>` : ''}
+    </div>
+
+    <div class="form-group">
+      <label>Full Name *</label>
+      <input type="text" id="wizUserFullName-${idx}" placeholder="e.g. Dr. John Silva" value="${escapeHtmlAttr(activeUser.full_name)}" oninput="updateWizardUserData(${idx}, 'full_name', this.value)" required>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group" style="flex: 1;">
+        <label>Username *</label>
+        <input type="text" id="wizUserUsername-${idx}" placeholder="username" value="${escapeHtmlAttr(activeUser.username)}" oninput="updateWizardUserData(${idx}, 'username', this.value)" required autocomplete="off">
       </div>
-      <div class="form-row">
-        <div class="form-group" style="flex: 1;">
-          <label>Username *</label>
-          <input type="text" id="wizUserUsername-${idx}" placeholder="username" value="${u.username}" oninput="updateWizardUserData(${idx}, 'username', this.value)" required autocomplete="off">
-        </div>
-        <div class="form-group" style="flex: 1;">
+      <div class="form-group" style="flex: 1;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
           <label>Role *</label>
-          <select id="wizUserRole-${idx}" onchange="updateWizardUserData(${idx}, 'role_slug', this.value)" style="padding: 7px 10px;">
-            ${roleOptionsHtml}
-          </select>
+          <a href="#" onclick="openCreateRoleModal('wizard'); return false;" style="font-size: 11px; color: var(--primary); text-decoration: none;">+ New Role</a>
         </div>
+        <select id="wizUserRole-${idx}" onchange="updateWizardUserData(${idx}, 'role_slug', this.value)" style="padding: 8px 10px;">
+          ${roleOptionsHtml}
+        </select>
       </div>
-      <div class="form-row">
-        <div class="form-group" style="flex: 1.5;">
-          <label>Password * (Min 6 chars)</label>
-          <input type="password" id="wizUserPassword-${idx}" placeholder="••••••••" value="${u.password}" oninput="updateWizardUserData(${idx}, 'password', this.value)" required autocomplete="new-password">
-        </div>
-        <div class="form-group" style="flex: 1;">
-          <label>Account Status</label>
-          <select id="wizUserStatus-${idx}" onchange="updateWizardUserData(${idx}, 'status', this.value)" style="padding: 7px 10px;">
-            <option value="active" ${u.status === 'active' ? 'selected' : ''}>Active</option>
-            <option value="inactive" ${u.status === 'inactive' ? 'selected' : ''}>Inactive</option>
-          </select>
-        </div>
-      </div>
+    </div>
 
-      <!-- INLINE MODULE ACCESS CONFIGURATION (As sketched) -->
-      <div style="background: rgba(15, 23, 42, 0.45); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; margin-top: 4px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-          <span style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">Assign Access (Modules):</span>
-          <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #38bdf8; cursor: pointer;">
-            <input type="checkbox" id="wizFullAdmin-${idx}" ${isFullAdmin ? 'checked' : ''} onchange="toggleWizardUserFullAdmin(${idx}, this.checked)">
-            <span>Full Admin? (Select all modules)</span>
-          </label>
+    <div class="form-row">
+      <div class="form-group" style="flex: 1.4;">
+        <label>Password * (Min 6 chars)</label>
+        <input type="password" id="wizUserPassword-${idx}" placeholder="••••••••" value="${escapeHtmlAttr(activeUser.password)}" oninput="updateWizardUserData(${idx}, 'password', this.value)" required autocomplete="new-password">
+      </div>
+      <div class="form-group" style="flex: 1;">
+        <label>Account Status</label>
+        <select id="wizUserStatus-${idx}" onchange="updateWizardUserData(${idx}, 'status', this.value)" style="padding: 8px 10px;">
+          <option value="active" ${activeUser.status === 'active' ? 'selected' : ''}>Active</option>
+          <option value="inactive" ${activeUser.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-muted);">
+      <span>User <strong>${idx + 1}</strong> of <strong>${wizardUsers.length}</strong></span>
+      <div style="display: flex; gap: 6px;">
+        ${idx > 0 ? `<button type="button" class="btn btn-secondary btn-xs" onclick="selectWizardUserTab(${idx - 1})">&larr; Prev User</button>` : ''}
+        ${idx < wizardUsers.length - 1 ? `<button type="button" class="btn btn-secondary btn-xs" onclick="selectWizardUserTab(${idx + 1})">Next User &rarr;</button>` : ''}
+      </div>
+    </div>
+  `;
+
+  // Right Column: Module Access & Permissions Control
+  const rightCol = document.createElement('div');
+  rightCol.className = 'user-editor-pane';
+
+  const modulesGridHtml = allSystemModules.map(mod => {
+    const isChecked = assignedMods.includes(mod.slug);
+    const meta = moduleCatalogMetadata[mod.slug] || { icon: '📦', desc: 'System module' };
+    return `
+      <div class="module-card-modern ${isChecked ? 'checked' : ''}" id="wizModCard-${idx}-${mod.slug}" onclick="toggleWizardUserModuleCard(${idx}, '${mod.slug}', event)">
+        <div class="module-card-icon">${meta.icon}</div>
+        <div class="module-card-info">
+          <div class="module-card-title">${mod.name}</div>
+          <div class="module-card-desc">${meta.desc}</div>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
-          ${modulesCheckboxesHtml}
-        </div>
+        <input type="checkbox" class="wiz-user-mod-${idx}" id="wizModChk-${idx}-${mod.slug}" value="${mod.slug}" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation()" onchange="handleWizardUserModuleToggle(${idx}, '${mod.slug}', this.checked)" style="accent-color: var(--primary); width: 16px; height: 16px; cursor: pointer; flex-shrink: 0;">
       </div>
     `;
-    container.appendChild(card);
-  });
+  }).join('');
+
+  rightCol.innerHTML = `
+    <div class="user-editor-pane-header">
+      <div>
+        <strong style="font-size: 13px; color: var(--text-primary);">Assign Module Access</strong>
+        <div style="font-size: 11px; color: var(--text-muted);">Select modules accessible by this account</div>
+      </div>
+      <span class="badge-status seen" id="wizUserModCountBadge-${idx}" style="font-size: 11px;">
+        <span id="wizUserModCount-${idx}">${assignedMods.length}</span> of ${allSystemModules.length} Modules Granted
+      </span>
+    </div>
+
+    <!-- Hero Full Admin Banner -->
+    <div class="full-admin-banner ${isFullAdmin ? 'active' : ''}" id="wizFullAdminBanner-${idx}" onclick="handleFullAdminBannerClick(${idx}, event)">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 36px; height: 36px; border-radius: 9px; background: rgba(14, 165, 233, 0.2); display: flex; align-items: center; justify-content: center; font-size: 18px; color: #38bdf8; flex-shrink: 0;">⚡</div>
+        <div>
+          <div style="font-weight: 700; font-size: 13px; color: #f8fafc;">Full System Administrator</div>
+          <div style="font-size: 11px; color: var(--text-secondary);">Instantly grant full access to all ${allSystemModules.length} clinical & financial modules</div>
+        </div>
+      </div>
+      <input type="checkbox" id="wizFullAdmin-${idx}" ${isFullAdmin ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleWizardUserFullAdmin(${idx}, this.checked)" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary);">
+    </div>
+
+    <!-- 6 Module Cards Grid -->
+    <div class="module-grid-modern">
+      ${modulesGridHtml}
+    </div>
+  `;
+
+  editorGrid.appendChild(leftCol);
+  editorGrid.appendChild(rightCol);
+  container.appendChild(editorGrid);
+}
+
+function handleFullAdminBannerClick(userIndex, event) {
+  if (event.target && event.target.tagName === 'INPUT') return;
+  const chk = document.getElementById(`wizFullAdmin-${userIndex}`);
+  if (chk) {
+    chk.checked = !chk.checked;
+    toggleWizardUserFullAdmin(userIndex, chk.checked);
+  }
 }
 
 function toggleWizardUserFullAdmin(userIndex, isFullAdmin) {
@@ -293,6 +413,15 @@ function toggleWizardUserFullAdmin(userIndex, isFullAdmin) {
   renderWizardUserCards();
 }
 
+function toggleWizardUserModuleCard(userIndex, moduleSlug, event) {
+  if (event.target && event.target.tagName === 'INPUT') return;
+  const chk = document.getElementById(`wizModChk-${userIndex}-${moduleSlug}`);
+  if (chk) {
+    chk.checked = !chk.checked;
+    handleWizardUserModuleToggle(userIndex, moduleSlug, chk.checked);
+  }
+}
+
 function handleWizardUserModuleToggle(userIndex, moduleSlug, isChecked) {
   const user = wizardUsers[userIndex];
   if (!user) return;
@@ -304,11 +433,26 @@ function handleWizardUserModuleToggle(userIndex, moduleSlug, isChecked) {
   }
   wizardUserModules[user.username] = list;
 
-  // Update Full Admin checkbox state
-  const fullAdminChk = document.getElementById(`wizFullAdmin-${userIndex}`);
-  if (fullAdminChk) {
-    fullAdminChk.checked = allSystemModules.length > 0 && list.length === allSystemModules.length;
+  // Update card styling
+  const card = document.getElementById(`wizModCard-${userIndex}-${moduleSlug}`);
+  if (card) {
+    if (isChecked) card.classList.add('checked');
+    else card.classList.remove('checked');
   }
+
+  // Update Full Admin state
+  const isFull = allSystemModules.length > 0 && list.length === allSystemModules.length;
+  const fullAdminChk = document.getElementById(`wizFullAdmin-${userIndex}`);
+  if (fullAdminChk) fullAdminChk.checked = isFull;
+  const banner = document.getElementById(`wizFullAdminBanner-${userIndex}`);
+  if (banner) {
+    if (isFull) banner.classList.add('active');
+    else banner.classList.remove('active');
+  }
+
+  // Update module count display
+  const countEl = document.getElementById(`wizUserModCount-${userIndex}`);
+  if (countEl) countEl.textContent = list.length;
 }
 
 function updateWizardUserData(index, field, value) {
@@ -316,12 +460,26 @@ function updateWizardUserData(index, field, value) {
   const oldUsername = wizardUsers[index].username;
   wizardUsers[index][field] = value;
 
+  // Live update tab pill title if name or username changes without stealing input focus
+  if (field === 'full_name' || field === 'username') {
+    const tabLabel = document.getElementById(`wizUserTabLabel-${index}`);
+    if (tabLabel) {
+      tabLabel.textContent = wizardUsers[index].full_name || wizardUsers[index].username || `User #${index + 1}`;
+    }
+  }
+
   if (field === 'role_slug') {
     const badge = document.getElementById(`wizUserBadge-${index}`);
     if (badge) {
       badge.textContent = value.toUpperCase();
       badge.className = `account-role-badge ${value === 'doctor' ? 'doctor' : (value === 'pharmacist' ? 'pharmacist' : 'receptionist')}`;
     }
+    const tabBadge = document.getElementById(`wizUserTabBadge-${index}`);
+    if (tabBadge) {
+      tabBadge.textContent = value.toUpperCase();
+      tabBadge.className = `account-role-badge ${value === 'doctor' ? 'doctor' : (value === 'pharmacist' ? 'pharmacist' : 'receptionist')}`;
+    }
+
     // Update default module assignments based on role
     if (value === 'doctor') {
       wizardUserModules[wizardUsers[index].username] = allSystemModules.map(m => m.slug);
@@ -688,14 +846,17 @@ async function updateLoginRolesPreview() {
 
 function addNewWizardUserCard() {
   const defaultRole = allDatabaseRoles.find(r => r.slug === 'receptionist') || allDatabaseRoles[0] || { slug: 'receptionist' };
+  const newUsername = 'user_' + (wizardUsers.length + 1);
   wizardUsers.push({
     id: Date.now(),
     full_name: '',
-    username: '',
+    username: newUsername,
     password: '',
     role_slug: defaultRole.slug,
     status: 'active'
   });
+  wizardUserModules[newUsername] = ['dashboard', 'appointments', 'patient_registry'];
+  activeWizardUserIdx = wizardUsers.length - 1;
   renderWizardUserCards();
 }
 
@@ -707,6 +868,9 @@ function removeWizardUserCard(index) {
   const removed = wizardUsers.splice(index, 1)[0];
   if (removed && removed.username) {
     delete wizardUserModules[removed.username];
+  }
+  if (activeWizardUserIdx >= wizardUsers.length) {
+    activeWizardUserIdx = Math.max(0, wizardUsers.length - 1);
   }
   renderWizardUserCards();
 }
@@ -730,27 +894,43 @@ function validateStep2AndProceed() {
     const pass = u.password || '';
 
     if (!fullName) {
+      activeWizardUserIdx = i;
+      renderWizardUserCards();
       errEl.textContent = `User #${i + 1}: Full Name is required.`;
       errEl.style.display = 'block';
+      const input = document.getElementById(`wizUserFullName-${i}`);
+      if (input) input.focus();
       return;
     }
 
     if (!uName) {
+      activeWizardUserIdx = i;
+      renderWizardUserCards();
       errEl.textContent = `User #${i + 1} (${fullName}): Username is required.`;
       errEl.style.display = 'block';
+      const input = document.getElementById(`wizUserUsername-${i}`);
+      if (input) input.focus();
       return;
     }
 
     if (usernamesSeen.has(uName.toLowerCase())) {
+      activeWizardUserIdx = i;
+      renderWizardUserCards();
       errEl.textContent = `Duplicate username detected: "${uName}". Usernames must be unique.`;
       errEl.style.display = 'block';
+      const input = document.getElementById(`wizUserUsername-${i}`);
+      if (input) input.focus();
       return;
     }
     usernamesSeen.add(uName.toLowerCase());
 
     if (!pass || pass.length < 6) {
+      activeWizardUserIdx = i;
+      renderWizardUserCards();
       errEl.textContent = `User "${uName}": Password must be at least 6 characters long.`;
       errEl.style.display = 'block';
+      const input = document.getElementById(`wizUserPassword-${i}`);
+      if (input) input.focus();
       return;
     }
 
